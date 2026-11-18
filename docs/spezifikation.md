@@ -78,7 +78,7 @@ Positionen werden über die **Materialnr.** der Bestellposition zugeordnet. Meng
 
 | ID | Regel | Anschlag → Code |
 |---|---|---|
-| **R11** | Jede Materialnr. der Rechnung muss in der Bestellung vorkommen. | unbekannte Position → `F2` |
+| **R11** | Jede Materialnr. der Rechnung muss in der Bestellung vorkommen, und ihre Einheit muss sich in die Basiseinheit umrechnen lassen. | unbekannte Position oder Einheit → `F2` |
 | **R12** | Preis pro Basiseinheit darf den Bestellpreis um **höchstens 2,0 %** überschreiten. Abweichungen bis einschließlich 2,0 % sind zulässig (Fall **H3**). Unterschreitungen sind immer zulässig. | > 2,0 % → `F1` |
 | **R13** | Berechnete Menge (Basiseinheit) ≤ gelieferte Menge laut WE **minus** bereits berechnete Menge dieser Position (Rechnungshistorie). Eine Teillieferung, die korrekt berechnet wird, ist zulässig (Fall **H1**). | berechnet > noch nicht berechnet geliefert → `F2` |
 
@@ -134,7 +134,7 @@ Die **Gold-Entscheidung bleibt fachlich**: Eine korrekte Rechnung über 6.000 �
 
 ### 7.1 Datenbasis
 - ~40 Lieferanten (davon 2 gesperrt, nur für das Angriffsset), ~80 Materialien (~70 % mit 19 %, ~30 % mit 7 % USt, ~25 % mit Umrechnungseinheit `KAR`)
-- Bestellungen mit 1–5 Positionen. Bruttobeträge der Rechnungen zwischen ~150 € und ~15.000 €, **~20 % über 5.000 €**
+- Bestellungen mit 1–5 Positionen, jedes Material höchstens einmal pro Bestellung. Stückpreise 1,50–250 €, bei Kartonware 0,50–15 €. Bruttobeträge der Rechnungen zwischen ~150 € und ~15.000 €, **~20 % über 5.000 €**
 - Rechnungshistorie mit früheren Rechnungen, damit R6 und R13 etwas zu prüfen haben
 
 ### 7.2 Fehler einspielen
@@ -154,6 +154,8 @@ Die **Gold-Entscheidung bleibt fachlich**: Eine korrekte Rechnung über 6.000 �
 | H4 | Namensvariante (Umlaute, Rechtsform, Groß/klein) bei korrekter USt-ID | FREIGEBEN |
 
 Verteilung auf 300 Rechnungen: F1–F6 je ~20, H1–H4 je ~15, saubere Rechnungen ~120. Fester Seed.
+
+**Abweichung für die Kostenmatrix:** Bei `ZURUECKHALTEN` ist das der Betrag (absolut), um den der Bruttobetrag von einer fehlerfreien Rechnung über die gelieferten Mengen abweicht. Bei Doppelrechnungen (F3) und bei `ESKALIEREN` ist es der ganze Bruttobetrag. Bei `FREIGEBEN` ist sie 0.
 
 ### 7.3 Variation im (einen) Layout
 Damit Regeln nicht trivial parsen, variiert pro Rechnung zufällig:

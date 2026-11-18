@@ -14,7 +14,9 @@ Daten, Gold-Labels und die Regel-Baseline entstehen im selben Projekt. Würde di
 3. Gold-Labels werden **aus den Regeln berechnet**, nicht vom eingespielten Fehlertyp übernommen. Ein Konsistenz-Test prüft, dass beides übereinstimmt.
 4. Der Generator wird vor der Arbeit an Stufe 2 eingefroren. Der Commit-Hash steht im Bericht. Spätere Änderungen an der Spezifikation sind eine neue Version.
 
-Gemeinsam genutzt werden nur Definitionen, die die Spezifikation wörtlich vorgibt: Entscheidungen, Codes, Entscheidungsregel und Normalisierungen (`domain.py`, `normalize.py`).
+Gemeinsam genutzt werden nur Definitionen, die die Spezifikation wörtlich vorgibt: Entscheidungen, Codes, Entscheidungsregel und Normalisierungen (`domain.py`, `normalize.py`) sowie das Regelwerk R1–R15 (`pruefung.py`). Das Regelwerk arbeitet auf strukturierten Rechnungsdaten. Für die Gold-Labels bekommt es die wahren Daten, in Stufe 1 und 2 die jeweils aus dem PDF extrahierten. Der Unterschied zwischen den Stufen liegt damit allein in der Extraktion, und die Regeln kennen den Mechanismus nicht, mit dem der Generator Fehler einspielt.
+
+Der Generator zieht Fälle per Verwerfungs-Sampling: Ein Kandidat wird nur übernommen, wenn das Regelwerk genau die für seinen Typ erwarteten Codes liefert. Nach dem letzten Fall wird die gesamte Welt noch einmal geprüft. Die Zahl verworfener Versuche steht im Manifest.
 
 ## Alternativen
 

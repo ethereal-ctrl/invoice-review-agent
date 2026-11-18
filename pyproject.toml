@@ -9,6 +9,8 @@ dependencies = [
     "pyyaml>=6.0",
     "typer>=0.15",
     "psycopg[binary]>=3.2",
+    "reportlab>=5.1.0",
+    "pdfplumber>=0.11.10",
 ]
 
 [project.scripts]
@@ -20,6 +22,7 @@ dev = [
     "ruff>=0.9",
     "pyright>=1.1.390",
     "types-pyyaml>=6.0",
+    "types-reportlab>=5.1.0.20261104",
 ]
 
 [build-system]

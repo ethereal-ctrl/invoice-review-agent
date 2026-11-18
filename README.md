@@ -13,7 +13,8 @@ Eingehende Rechnungen werden gegen Bestellung, Wareneingang und Stammdaten gepr�
 | Fachliche Spezifikation | ✅ [docs/spezifikation.md](docs/spezifikation.md) |
 | Domänenmodell, Normalisierung, Config | ✅ |
 | Postgres-Schema mit getrennten Rollen | ✅ |
-| Datengenerator mit Gold-Labels | ⏳ |
+| Regelwerk R1–R15 (Referenz-Implementierung der Spezifikation) | ✅ |
+| Datengenerator mit Gold-Labels und PDF-Rendering | ✅ |
 | Eval-Harness, Baselines, Stufe 1 (Regeln) | ⏳ |
 | Stufe 2 (LLM-Extraktion) | ⏳ |
 | Policy-Middleware, Audit-Log | ⏳ |
@@ -41,7 +42,17 @@ cp .env.example .env
 docker compose up -d --wait
 uv sync
 uv run pytest
+uv run invoice generate   # 300 Rechnungen nach data/v1 (PDFs, ERP-Daten, Gold-Labels)
+uv run invoice load       # ERP-Daten und Fälle in Postgres laden
 ```
+
+Der Generator ist deterministisch (fester Seed, reproduzierbare PDF-Bytes). `data/v1/manifest.json` enthält den Git-Commit, die Prüfsumme der Spezifikation und der Gold-Labels.
+
+| Pfad | Inhalt | Sichtbar für |
+|---|---|---|
+| `data/v1/eingang/` | Rechnungen als PDF | Agent |
+| `data/v1/erp.json` | Stammdaten, Bestellungen, Wareneingänge, Rechnungshistorie | Agent (über Postgres, nur lesend) |
+| `data/v1/eval/` | Gold-Labels, wahre Rechnungsdaten, Render-Varianten | nur Eval-Harness |
 
 ## Entwicklung
 
