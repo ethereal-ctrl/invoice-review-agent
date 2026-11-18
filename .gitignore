@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Lokale Konfiguration und Secrets
+.env
+
+# Generierte Daten und Läufe
+data/
+runs/
+cache/
+eval/gold*.jsonl
+eval/out/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

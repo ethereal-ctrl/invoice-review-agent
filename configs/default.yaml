@@ -1,0 +1,17 @@
+# Werte gemäß docs/spezifikation.md. Änderungen nach dem Einfrieren des Generators = neue Version.
+
+toleranzen:
+  preis_prozent: "2.0"      # R12: zulässige Überschreitung des Bestellpreises
+  betrag_eur: "0.01"        # R7, R8, R10: Rundungstoleranz
+  duplikat_tage: 30         # R6 (c): Zeitfenster für Doppelrechnungen
+
+policy:
+  freigabegrenze_eur: "5000.00"  # R15: kumuliert pro Bestellung, brutto
+  fenster_tage: 30               # R15: Zeitfenster für die Kumulierung
+
+generator:
+  seed: 20261119
+  anzahl: 300
+  dev: 100
+  test: 200
+  smoke: 30                 # geschichtete Teilmenge von dev
