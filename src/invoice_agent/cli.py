@@ -68,3 +68,82 @@ def load(
     with psycopg.connect(dsn) as conn:
         db.lade(conn, welt, fall_ids, (out / "eingang").resolve())
     typer.echo(f"{len(fall_ids)} Fälle und {len(welt.bestellungen)} Bestellungen geladen.")
+
+
+STANDARD_LAEUFE = Path("runs")
+LaeufeOption = Annotated[Path, typer.Option("--runs", file_okay=False)]
+
+
+def _prozent(x: float) -> str:
+    return f"{x * 100:5.1f} %"
+
+
+@app.command("eval")
+def eval_lauf(
+    stufe: Annotated[str, typer.Option("--stufe", "-s", help="b0, b1, regeln")],
+    split: Annotated[str, typer.Option("--split", help="dev, smoke, test (Test nur einmal!)")],
+    config: ConfigOption = STANDARD_CONFIG,
+    daten: ZielOption = STANDARD_ZIEL,
+    runs: LaeufeOption = STANDARD_LAEUFE,
+) -> None:
+    """Eine Stufe auf einem Split auswerten und den Lauf speichern."""
+    from invoice_agent.eval.laeufe import SplitBereitsVerwendet
+    from invoice_agent.eval.runner import lauf
+
+    try:
+        ordner, m = lauf(stufe, split, lade(config), daten, runs)
+    except SplitBereitsVerwendet as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(2) from e
+    typer.echo(f"Lauf: {ordner}")
+    typer.echo(f"  Fälle                      {m.anzahl}")
+    typer.echo(f"  Kosten pro 100 Rechnungen  {m.kosten_pro_100:>10} €")
+    typer.echo(f"  ... bei 5 % Fehlerquote    {m.kosten_pro_100_real:>10} €")
+    typer.echo(f"  Genauigkeit                {_prozent(m.genauigkeit)}")
+    typer.echo(f"  Unsichere Aktionen         {m.unsichere_aktionen} ({_prozent(m.rate_unsicher)})")
+    typer.echo(f"  Last für Menschen          {_prozent(m.last_mensch)}")
+    typer.echo(f"  davon Kompetenzregel R15   {_prozent(m.interrupt_rate)}")
+    typer.echo(f"  Extraktionsfehler          {m.extraktion_fehler}")
+    erkennung = ", ".join(f"{t} {v:.0%}" for t, v in m.erkennung_pro_typ.items())
+    fehlalarm = ", ".join(f"{t} {v:.0%}" for t, v in m.fehlalarm_pro_typ.items())
+    typer.echo(f"  Erkennung                  {erkennung}")
+    typer.echo(f"  Fehlalarm                  {fehlalarm}")
+    typer.echo(f"  Latenz p50 / p95           {m.latenz_p50_ms:.0f} / {m.latenz_p95_ms:.0f} ms")
+    if len(m.nach_layout) > 1:
+        for layout, w in m.nach_layout.items():
+            typer.echo(
+                f"  Layout {layout} ({int(w['anzahl'])} Fälle)      Kosten/100 "
+                f"{w['kosten_pro_100']:.2f} €, Genauigkeit {_prozent(w['genauigkeit'])}, "
+                f"unsicher {_prozent(w['rate_unsicher'])}, "
+                f"Extraktionsfehler {int(w['extraktion_fehler'])}"
+            )
+
+
+@app.command("compare")
+def compare(
+    lauf_a: Annotated[Path, typer.Argument(exists=True, file_okay=False)],
+    lauf_b: Annotated[Path, typer.Argument(exists=True, file_okay=False)],
+    config: ConfigOption = STANDARD_CONFIG,
+    daten: ZielOption = STANDARD_ZIEL,
+) -> None:
+    """Lauf B gegen Lauf A mit gepaartem Bootstrap vergleichen (gleicher Split nötig)."""
+    from invoice_agent.eval.bootstrap import vergleiche
+    from invoice_agent.eval.laeufe import lade_meta, lade_vorhersagen
+    from invoice_agent.eval.runner import auswahl
+    from invoice_agent.gold import lade_gold
+
+    meta_a, meta_b = lade_meta(lauf_a), lade_meta(lauf_b)
+    if meta_a["split"] != meta_b["split"]:
+        typer.echo("Die Läufe stammen aus verschiedenen Splits.", err=True)
+        raise typer.Exit(2)
+    gold = auswahl(lade_gold(daten / "eval" / "gold.jsonl"), str(meta_a["split"]))
+    ergebnis = vergleiche(
+        gold, lade_vorhersagen(lauf_a), lade_vorhersagen(lauf_b), lade(config).kosten
+    )
+    typer.echo(f"B = {meta_b['stufe']}  gegen  A = {meta_a['stufe']}  ({meta_a['split']})")
+    for v in ergebnis:
+        stern = " *" if v.signifikant else ""
+        typer.echo(
+            f"  {v.kennzahl:<16} A {v.a:10.3f}  B {v.b:10.3f}  "
+            f"B-A {v.differenz:+10.3f}  95 % [{v.unten:+.3f}, {v.oben:+.3f}]{stern}"
+        )

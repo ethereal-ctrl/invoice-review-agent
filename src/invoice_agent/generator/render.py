@@ -1,8 +1,13 @@
-"""PDF-Rendering in einem Layout mit Variation (Spezifikation 7.3).
+"""PDF-Rendering (Spezifikation 7.3).
 
-Pro Rechnung werden Feldbezeichnungen, Datums- und Zahlenformate, Titel und die Lage von
-Bank- und Steuerangaben zufällig gewählt. Die Wahl wird zurückgegeben, damit sich Fehler
-später nach Variante auswerten lassen.
+Layout A: das Standardlayout, mit zufälligen Feldbezeichnungen, Datums- und Zahlenformaten,
+Titel und Lage von Bank- und Steuerangaben. Kommt in Dev, Smoke und Test vor.
+
+Layout C: ein deutlich anderes Format (Fließtext-Kopf ohne Doppelpunkte, Positionen als
+zweizeilige Blöcke, eigene Bezeichnungen und Formate). Kommt **nur im Test-Split** vor und
+misst, wie eine Stufe mit einem Lieferantenformat umgeht, das sie nie gesehen hat.
+
+Die Wahl wird zurückgegeben, damit sich Fehler später nach Variante auswerten lassen.
 """
 
 import random
@@ -65,14 +70,26 @@ class Variante:
     kopf_reihenfolge: tuple[str, ...]
     bank_im_kopf: bool
     ust_id_im_kopf: bool
+    layout: str = "A"
 
     def als_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
-def waehle_variante(rng: random.Random) -> Variante:
+def waehle_variante(rng: random.Random, layout: str = "A") -> Variante:
     kopf = ["re_nr", "datum", "best_nr"]
     rng.shuffle(kopf)
+    if layout == "C":
+        return Variante(
+            labels={},
+            datumsformat="dmy_slash",
+            zahlenformat="de_euro_wort",
+            satzformat="{s} %",
+            kopf_reihenfolge=tuple(kopf),
+            bank_im_kopf=False,
+            ust_id_im_kopf=True,
+            layout="C",
+        )
     return Variante(
         labels={k: rng.choice(v) for k, v in LABELS.items()},
         datumsformat=rng.choice(DATUMSFORMATE),
@@ -89,6 +106,8 @@ def datum_text(d: date, art: str) -> str:
         return d.isoformat()
     if art == "lang":
         return f"{d.day}. {_MONATE[d.month - 1]} {d.year}"
+    if art == "dmy_slash":
+        return d.strftime("%d/%m/%Y")
     return d.strftime("%d.%m.%Y")
 
 
@@ -98,6 +117,8 @@ def betrag_text(x: Decimal, art: str) -> str:
     if art == "de_eur":
         return f"{vorzeichen}{ganz},{nachkomma} EUR"
     gruppen = f"{int(ganz):,}"
+    if art == "de_euro_wort":
+        return f"{vorzeichen}{gruppen.replace(',', '.')},{nachkomma} Euro"
     if art == "eur_leer":
         return f"EUR {vorzeichen}{gruppen.replace(',', ' ')},{nachkomma}"
     return f"{vorzeichen}{gruppen.replace(',', '.')},{nachkomma} €"
@@ -108,6 +129,9 @@ def satz_text(satz: Decimal, fmt: str) -> str:
 
 
 def render(re: Rechnung, pfad: Path, v: Variante) -> None:
+    if v.layout == "C":
+        _render_c(re, pfad, v)
+        return
     pfad.parent.mkdir(parents=True, exist_ok=True)
     c = Canvas(str(pfad), pagesize=A4, invariant=True)  # reproduzierbare Bytes
     breite, hoehe = A4
@@ -220,6 +244,81 @@ def render(re: Rechnung, pfad: Path, v: Variante) -> None:
     c.drawString(links, 56, f"{re.lieferant_name} · {re.lieferant_strasse} · {re.lieferant_ort}")
     if fuss:
         c.drawString(links, 44, " · ".join(fuss))
+
+    c.showPage()
+    c.save()
+
+
+def _render_c(re: Rechnung, pfad: Path, v: Variante) -> None:
+    """Layout C: anderes Lieferantenformat, nur im Test-Split."""
+    pfad.parent.mkdir(parents=True, exist_ok=True)
+    c = Canvas(str(pfad), pagesize=A4, invariant=True)
+    breite, hoehe = A4
+    links, rechts = 60.0, breite - 60.0
+
+    def geld(x: Decimal) -> str:
+        return betrag_text(x, v.zahlenformat)
+
+    y = hoehe - 55
+    c.setFont("Helvetica-Bold", 18)
+    c.drawRightString(rechts, y, "RECHNUNGSBELEG")
+    c.setFont("Helvetica", 9)
+    c.drawString(links, y, f"Von {re.lieferant_name}")
+    c.drawString(links, y - 12, f"{re.lieferant_strasse}, {re.lieferant_ort}")
+    c.drawString(links, y - 24, f"An {', '.join(KUNDE[i] for i in (0, 2, 3))}")
+
+    werte = {
+        "re_nr": f"Dokumentnummer {re.re_nr}",
+        "datum": f"Ausstellungsdatum {datum_text(re.datum, v.datumsformat)}",
+        "best_nr": f"Bezug Bestellung {re.best_nr}" if re.best_nr else "",
+    }
+    y = hoehe - 110
+    c.setFont("Helvetica", 10)
+    for schluessel in v.kopf_reihenfolge:
+        if werte[schluessel]:
+            c.drawString(links, y, werte[schluessel])
+            y -= 14
+    if re.ust_id:
+        c.drawString(links, y, f"Umsatzsteuer-Identifikationsnummer {re.ust_id}")
+        y -= 14
+
+    y -= 20
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(links, y, "Leistungen")
+    for i, p in enumerate(re.positionen, start=1):
+        y -= 18
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(links, y, f"{i}) {p.bezeichnung}")
+        y -= 12
+        c.setFont("Helvetica", 9)
+        satz = satz_text(p.ust_satz, v.satzformat)
+        c.drawString(
+            links + 14,
+            y,
+            f"Artikel {p.mat_nr} · {p.menge} {p.einheit} à {geld(p.preis_netto)} · "
+            f"Summe {geld(p.betrag_netto)} · Steuersatz {satz}",
+        )
+
+    y -= 30
+    c.setFont("Helvetica", 10)
+    c.drawString(links, y, "Warenwert")
+    c.drawRightString(rechts, y, geld(re.netto))
+    for z in re.ust:
+        y -= 14
+        c.drawString(links, y, f"zzgl. {satz_text(z.satz, v.satzformat)} auf {geld(z.netto)}")
+        c.drawRightString(rechts, y, geld(z.betrag))
+    y -= 18
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(links, y, "Zu zahlen")
+    c.drawRightString(rechts, y, geld(re.brutto))
+
+    c.setFont("Helvetica", 9)
+    if re.iban:
+        y -= 30
+        c.drawString(links, y, f"Bitte überweisen an {re.iban}")
+    if re.freitext:
+        y -= 16
+        c.drawString(links, y, re.freitext)
 
     c.showPage()
     c.save()

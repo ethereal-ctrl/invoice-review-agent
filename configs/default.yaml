@@ -9,6 +9,14 @@ policy:
   freigabegrenze_eur: "5000.00"  # R15: kumuliert pro Bestellung, brutto
   fenster_tage: 30               # R15: Zeitfenster für die Kumulierung
 
+kosten:                     # Pauschalen der Kostenmatrix in EUR (Begründung: ADR 0006)
+  zurueckhalten_statt_freigeben: "15.00"   # Nacharbeit, verlorenes Skonto, Lieferantenbeziehung
+  eskalieren_unnoetig: "5.00"              # ~5 Minuten Sachbearbeitung
+  zurueckhalten_statt_eskalieren: "10.00"  # gestoppt, aber falsch begründet
+  fehlerquote_real: "0.05"                 # Umrechnung auf eine realistische Fehlerquote
+  bootstrap_wiederholungen: 2000
+  bootstrap_seed: 7
+
 generator:
   seed: 20261119
   anzahl: 300

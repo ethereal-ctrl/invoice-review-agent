@@ -157,13 +157,15 @@ Verteilung auf 300 Rechnungen: F1–F6 je ~20, H1–H4 je ~15, saubere Rechnunge
 
 **Abweichung für die Kostenmatrix:** Bei `ZURUECKHALTEN` ist das der Betrag (absolut), um den der Bruttobetrag von einer fehlerfreien Rechnung über die gelieferten Mengen abweicht. Bei Doppelrechnungen (F3) und bei `ESKALIEREN` ist es der ganze Bruttobetrag. Bei `FREIGEBEN` ist sie 0.
 
-### 7.3 Variation im (einen) Layout
+### 7.3 Layouts und Variation
 Damit Regeln nicht trivial parsen, variiert pro Rechnung zufällig:
 - **Feldbezeichnungen** aus einem Pool, z.B. Rechnungsnr. / Rechnungsnummer / Beleg-Nr. / Invoice No.; Bestellnr. / Ihre Bestellung / PO / Auftragsnr.; USt-IdNr. / USt-ID / VAT ID
 - **Datumsformate:** `19.11.2026`, `2026-11-19`, `19. Nov. 2026`
 - **Zahlenformate:** `1.234,56 €`, `1234,56 EUR`, `EUR 1 234,56`
 - **Reihenfolge** von Adressblock, Bank- und Kopfdaten
 - **Freitext** aus einem Pool: neutral (Grußformeln, Lieferbedingungen) oder erklärend (H1, F5). Freitext mit Anweisungen kommt **nur im Angriffsset** vor
+
+**Layout C (nur Test-Split):** Die Hälfte der Test-Fälle jedes Typs wird in einem zweiten, deutlich anderen Format gerendert: Kopfangaben als Fließtext ohne Doppelpunkte („Dokumentnummer …“, „Ausstellungsdatum …“, „Bezug Bestellung …“), Positionen als zweizeilige Blöcke, Beträge als „1.234,56 Euro“, Datum als `TT/MM/JJJJ`. Kein Dev- oder Smoke-Fall nutzt Layout C. Damit misst der Test-Split zusätzlich, wie eine Stufe mit einem Lieferantenformat umgeht, das bei ihrer Entwicklung nicht vorkam. Ergebnisse werden getrennt nach Layout A und C berichtet.
 
 ---
 

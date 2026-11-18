@@ -20,6 +20,7 @@ from invoice_agent import normalize
 from invoice_agent.config import Settings
 from invoice_agent.domain import Code, Entscheidung, entscheide
 from invoice_agent.generator import stammdaten
+from invoice_agent.gold import Gold
 from invoice_agent.model import (
     Bestellung,
     BestPos,
@@ -75,18 +76,6 @@ _RE_FORMATE = ("RE-{j}-{n:05d}", "{n:06d}", "INV{n:05d}", "R{j}{n:04d}", "{j}/{n
 
 class _Modell(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-
-
-class Gold(_Modell):
-    fall_id: str
-    split: str  # "dev" | "test"
-    smoke: bool
-    typ: str
-    variante: str | None
-    entscheidung: Entscheidung
-    codes: tuple[Code, ...]
-    brutto: Decimal
-    abweichung_eur: Decimal  # Betrag, der bei falscher Freigabe zu viel gezahlt würde
 
 
 class Fall(_Modell):
@@ -565,6 +554,16 @@ def erzeuge(settings: Settings) -> Ergebnis:
         markierung = ["dev"] * anteile[typ] + ["test"] * (n - anteile[typ])
         rng.shuffle(markierung)
         split.extend(markierung)
+    # Layout C: die Hälfte der Test-Fälle jedes Typs, eigener Zufallsstrom (Fall-IDs bleiben gleich)
+    layout = ["A"] * len(roh)
+    rng_layout = random.Random(f"{g.seed}:layout")
+    start = 0
+    for typ in TYPEN:
+        test_idx = [i for i in range(start, start + VERTEILUNG[typ]) if split[i] == "test"]
+        rng_layout.shuffle(test_idx)
+        for i in test_idx[: len(test_idx) // 2]:
+            layout[i] = "C"
+        start += VERTEILUNG[typ]
     reihenfolge = list(range(len(roh)))
     rng.shuffle(reihenfolge)
 
@@ -592,6 +591,7 @@ def erzeuge(settings: Settings) -> Ergebnis:
             abweichung_eur=Decimal(0)
             if entscheidung is Entscheidung.FREIGEBEN
             else kand.abweichung,
+            layout=layout[i],
         )
         faelle.append(Fall(fall_id=fall_id, rechnung=kand.rechnung, gold=gold))
     return Ergebnis(welt=welt, faelle=faelle, verworfen=dict(ctx.verworfen))

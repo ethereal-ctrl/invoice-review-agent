@@ -39,9 +39,19 @@ class GeneratorConfig(_Basis):
         return self
 
 
+class KostenConfig(_Basis):
+    zurueckhalten_statt_freigeben: Decimal = Field(ge=0)
+    eskalieren_unnoetig: Decimal = Field(ge=0)
+    zurueckhalten_statt_eskalieren: Decimal = Field(ge=0)
+    fehlerquote_real: Decimal = Field(gt=0, lt=1)
+    bootstrap_wiederholungen: int = Field(gt=0)
+    bootstrap_seed: int
+
+
 class Settings(_Basis):
     toleranzen: Toleranzen
     policy: PolicyConfig
+    kosten: KostenConfig
     generator: GeneratorConfig
 
 

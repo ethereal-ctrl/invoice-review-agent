@@ -15,7 +15,8 @@ Eingehende Rechnungen werden gegen Bestellung, Wareneingang und Stammdaten gepr�
 | Postgres-Schema mit getrennten Rollen | ✅ |
 | Regelwerk R1–R15 (Referenz-Implementierung der Spezifikation) | ✅ |
 | Datengenerator mit Gold-Labels und PDF-Rendering | ✅ |
-| Eval-Harness, Baselines, Stufe 1 (Regeln) | ⏳ |
+| Eval-Harness (Kostenmatrix, gepaarter Bootstrap, Test-Split-Sperre) | ✅ |
+| Baselines B0/B1, Stufe 1 (Regex-Extraktion + Regeln) | ✅ |
 | Stufe 2 (LLM-Extraktion) | ⏳ |
 | Policy-Middleware, Audit-Log | ⏳ |
 | Stufe 3 (Agent mit Tools, LangGraph) | ⏳ |
@@ -34,6 +35,14 @@ Jede Stufe ändert genau eine Sache und wird mit gepaartem Bootstrap gegen die v
 | 3 | Agent mit Tools |
 
 Hauptmetrik sind die **Kosten pro 100 Rechnungen** über eine Kostenmatrix in Euro. Eine Freigabe, die nicht hätte erfolgen dürfen, kostet den zu viel gezahlten Betrag oder bei Betrug den ganzen Rechnungsbetrag.
+
+**Zwei Layouts:** Dev und Smoke enthalten nur Layout A. Im Test-Split ist die Hälfte der Fälle jedes Typs in **Layout C** gerendert, einem Format, das bei der Entwicklung keiner Stufe vorkam. Ergebnisse werden getrennt nach Layout berichtet. So wird sichtbar, ob eine Stufe nur das bekannte Format beherrscht oder auch ein neues Lieferantenformat.
+
+```bash
+uv run invoice eval --stufe regeln --split dev      # beliebig oft
+uv run invoice eval --stufe regeln --split test     # genau einmal pro Stufe
+uv run invoice compare runs/<lauf_a> runs/<lauf_b>  # gepaarter Bootstrap, 95-%-Intervall
+```
 
 ## Schnellstart
 

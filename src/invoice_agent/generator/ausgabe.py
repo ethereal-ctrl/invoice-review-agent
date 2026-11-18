@@ -52,7 +52,9 @@ def schreibe(
         (eval_dir / "varianten.jsonl").open("w", encoding="utf-8") as varianten,
     ):
         for fall in ergebnis.faelle:
-            variante = waehle_variante(random.Random(f"{seed}:render:{fall.fall_id}"))
+            variante = waehle_variante(
+                random.Random(f"{seed}:render:{fall.fall_id}"), fall.gold.layout
+            )
             render(fall.rechnung, eingang / f"{fall.fall_id}.pdf", variante)
             gold.write(fall.gold.model_dump_json() + "\n")
             rechnungen.write(

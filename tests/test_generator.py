@@ -162,3 +162,34 @@ def test_pdf_enthaelt_kernangaben(ergebnis: Ergebnis, tmp_path: Path, nr: int) -
 )
 def test_zahlenformate(art: str, erwartet: str) -> None:
     assert betrag_text(Decimal("1234.56"), art) == erwartet
+
+
+# ---------------------------------------------------------------- Layout C
+
+
+def test_layout_c_nur_im_test_split(ergebnis: Ergebnis) -> None:
+    c = [f for f in ergebnis.faelle if f.gold.layout == "C"]
+    assert c, "Layout C fehlt"
+    assert all(f.gold.split == "test" and not f.gold.smoke for f in c)
+
+
+def test_layout_c_etwa_die_haelfte_jedes_typs_im_test(ergebnis: Ergebnis) -> None:
+    for typ in TYPEN:
+        test = [f for f in ergebnis.faelle if f.gold.typ == typ and f.gold.split == "test"]
+        c = sum(f.gold.layout == "C" for f in test)
+        assert c == len(test) // 2, typ
+
+
+@pytest.mark.parametrize("nr", range(4))
+def test_layout_c_pdf_enthaelt_kernangaben(ergebnis: Ergebnis, tmp_path: Path, nr: int) -> None:
+    import random
+
+    fall = ergebnis.faelle[nr * 11]
+    variante = waehle_variante(random.Random(nr), "C")
+    pfad = tmp_path / "c.pdf"
+    render(fall.rechnung, pfad, variante)
+    with pdfplumber.open(pfad) as pdf:
+        text = pdf.pages[0].extract_text()
+    assert "RECHNUNGSBELEG" in text
+    assert fall.rechnung.re_nr in text
+    assert betrag_text(fall.rechnung.brutto, "de_euro_wort") in text
