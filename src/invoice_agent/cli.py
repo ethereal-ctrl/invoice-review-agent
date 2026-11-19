@@ -11,7 +11,7 @@ import psycopg
 import typer
 
 from invoice_agent import db
-from invoice_agent.config import lade
+from invoice_agent.config import Settings, lade
 from invoice_agent.model import Welt
 
 app = typer.Typer(no_args_is_help=True, help="Rechnungsprüfung: Generator, Eval-Ladder, Agent.")
@@ -93,6 +93,12 @@ def _prozent(x: float) -> str:
     return f"{x * 100:5.1f} %"
 
 
+def _mit_worker(settings: Settings, worker: int | None) -> Settings:
+    if worker is None:
+        return settings
+    return settings.model_copy(update={"llm": settings.llm.model_copy(update={"worker": worker})})
+
+
 def _pruefe_gate(pfad: Path, stufe: str, split: str, unsicher: int, kosten: Decimal) -> str | None:
     """None, wenn das Gate hält; sonst der Grund."""
     import yaml
@@ -124,6 +130,7 @@ def eval_lauf(
         Path | None,
         typer.Option(exists=True, dir_okay=False, help="Regression Gate (configs/gate.yaml)"),
     ] = None,
+    worker: Annotated[int | None, typer.Option(min=1, help="Parallele Fälle")] = None,
 ) -> None:
     """Eine Stufe auf einem Split auswerten und den Lauf speichern."""
     from invoice_agent.eval.laeufe import SplitBereitsVerwendet
@@ -136,7 +143,8 @@ def eval_lauf(
                 typer.echo(f"  {i}/{n}", err=True)
 
         modus = "replay" if replay else "live"
-        ordner, m = lauf(stufe, split, lade(config), daten, runs, modus, fortschritt)
+        settings = _mit_worker(lade(config), worker)
+        ordner, m = lauf(stufe, split, settings, daten, runs, modus, fortschritt)
     except SplitBereitsVerwendet as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(2) from e
@@ -154,6 +162,13 @@ def eval_lauf(
     typer.echo(f"  Erkennung                  {erkennung}")
     typer.echo(f"  Fehlalarm                  {fehlalarm}")
     typer.echo(f"  Latenz p50 / p95           {m.latenz_p50_ms:.0f} / {m.latenz_p95_ms:.0f} ms")
+    if m.anteil_cache:
+        hinweis = (
+            " (Latenz nur aus Live-Fällen)"
+            if m.anteil_cache < 1
+            else " (Latenz nicht aussagekräftig)"
+        )
+        typer.echo(f"  Antworten aus dem Cache    {_prozent(m.anteil_cache)}{hinweis}")
     if m.token_kosten_pro_100:
         typer.echo(f"  Token-Kosten pro 100       {m.token_kosten_pro_100} € (notionell)")
     if len(m.nach_layout) > 1:
@@ -355,3 +370,37 @@ def sensitivitaet(
         werte = "".join(f"{sz.kosten[s]:>16} €" for s in laeufe)
         typer.echo(f"{sz.name:<38}{werte}  {gleich}")
     typer.echo(f"\nReihenfolge im Basisfall: {basis.rangfolge}")
+
+
+@app.command("vorwaermen")
+def vorwaermen(
+    stufe: Annotated[str, typer.Option("--stufe", "-s")],
+    split: Annotated[str, typer.Option("--split")] = "test",
+    versuche: Annotated[int, typer.Option(min=1)] = 3,
+    pause: Annotated[float, typer.Option(help="Sekunden zwischen Durchgängen")] = 120.0,
+    worker: Annotated[int | None, typer.Option(min=1)] = None,
+    config: ConfigOption = STANDARD_CONFIG,
+    daten: ZielOption = STANDARD_ZIEL,
+    runs: LaeufeOption = STANDARD_LAEUFE,
+) -> None:
+    """Cache füllen, ohne Entscheidungen zu speichern (vor dem einmaligen Test-Lauf).
+    Exit-Code 1, wenn nach allen Versuchen Fälle unbeantwortet bleiben."""
+    from invoice_agent.audit import SpeicherAudit
+    from invoice_agent.eval.runner import baue_stufe
+    from invoice_agent.eval.vorwaermen import speichere_bericht, waerme
+
+    settings = _mit_worker(lade(config), worker)
+    welt = Welt.model_validate_json((daten / "erp.json").read_text(encoding="utf-8"))
+    # Nur Fall-IDs des Splits; Entscheidungen und Codes aus dem Gold werden nicht gelesen.
+    with (daten / "eval" / "gold.jsonl").open(encoding="utf-8") as f:
+        zeilen = [json.loads(z) for z in f if z.strip()]
+    ids = [z["fall_id"] for z in zeilen if z["split"] == split or (split == "smoke" and z["smoke"])]
+    faelle = [(i, daten / "eingang" / f"{i}.pdf") for i in ids]
+    st = baue_stufe(stufe, settings, welt, "live", SpeicherAudit(), f"vorwaermen_{stufe}")
+    bericht = waerme(st, faelle, settings.llm.worker, versuche, pause, typer.echo)
+    pfad = speichere_bericht(runs, stufe, split, bericht)
+    beantwortet = bericht.anzahl - len(bericht.offen)
+    typer.echo(f"{stufe} auf {split}: {beantwortet}/{bericht.anzahl} beantwortet, Bericht {pfad}")
+    if not bericht.vollstaendig:
+        typer.echo(f"Unbeantwortet: {', '.join(bericht.offen)}", err=True)
+        raise typer.Exit(1)

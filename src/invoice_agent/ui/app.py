@@ -27,15 +27,27 @@ VORLAGEN.env.filters["json"] = lambda wert: json.dumps(wert, ensure_ascii=False)
 LADDER = ("b0", "b1", "regeln", "llm:nim_gross", "agent:nim_gross")
 
 
+def _anteil_cache(stufe: str, m: dict[str, Any]) -> float:
+    """Anteil aus dem Cache beantworteter Fälle. Ältere Läufe kennen das Feld nicht: Eine
+    LLM-Stufe mit p50 unter 1 s kann dann nur aus dem Cache gekommen sein."""
+    if "anteil_cache" in m:
+        return float(m["anteil_cache"])
+    return 1.0 if ":" in stufe and float(m["latenz_p50_ms"]) < 1000 else 0.0
+
+
 def _kennzahlen(runs: Path, split: str = "dev") -> list[dict[str, Any]]:
-    """Letzter Lauf je Stufe auf dem Split (nur Metriken, keine Gold-Daten)."""
+    """Letzter Lauf je Stufe (Kosten, Genauigkeit); die Latenz aus dem neuesten Lauf, der
+    überwiegend live beantwortet wurde (keine Gold-Daten)."""
     zeilen: list[dict[str, Any]] = []
     for stufe in LADDER:
         laeufe = sorted(runs.glob(f"{stufe}_{split}_*/metriken.json"))
         if not laeufe:
             continue
-        m = json.loads(laeufe[-1].read_text(encoding="utf-8"))
-        zeilen.append({"stufe": stufe, "lauf": laeufe[-1].parent.name, **m})
+        metriken = [json.loads(p.read_text(encoding="utf-8")) for p in laeufe]
+        live = [m for m in metriken if _anteil_cache(stufe, m) < 0.5]
+        zeile = {"stufe": stufe, "lauf": laeufe[-1].parent.name, **metriken[-1]}
+        zeile["latenz_live_p50_ms"] = live[-1]["latenz_p50_ms"] if live else None
+        zeilen.append(zeile)
     return zeilen
 
 

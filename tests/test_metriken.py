@@ -134,3 +134,15 @@ def test_metriken_getrennt_nach_layout() -> None:
     assert m.nach_layout["A"]["genauigkeit"] == 1.0
     assert m.nach_layout["C"]["genauigkeit"] == 0.0
     assert m.nach_layout["C"]["kosten_pro_100"] == 500.0
+
+
+def test_latenz_nur_aus_live_faellen() -> None:
+    gold = [_gold(f, "SAUBER", F) for f in ("a", "b", "c")]
+    v = [
+        Vorhersage(fall_id="a", entscheidung=F, latenz_ms=90_000),
+        Vorhersage(fall_id="b", entscheidung=F, latenz_ms=5, aus_cache=True),
+        Vorhersage(fall_id="c", entscheidung=F, latenz_ms=7, aus_cache=True),
+    ]
+    m = berechne(gold, v, K)
+    assert m.latenz_p50_ms == 90_000
+    assert abs(m.anteil_cache - 2 / 3) < 1e-9

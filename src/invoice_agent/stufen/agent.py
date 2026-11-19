@@ -156,6 +156,7 @@ class Zustand(TypedDict, total=False):
     extraktion_ok: bool
     tokens_ein: int
     tokens_aus: int
+    live_aufrufe: int  # LLM-Aufrufe, die nicht aus dem Cache kamen
 
 
 def _brutto(rechnung: Mapping[str, Any] | None) -> Decimal | None:
@@ -259,6 +260,7 @@ class Agentenstufe:
             "schritte": 0,
             "tokens_ein": ex.tokens_ein,
             "tokens_aus": ex.tokens_aus,
+            "live_aufrufe": 0 if ex.aus_cache else 1,
         }
 
     def _agent(self, state: Zustand) -> dict[str, Any]:
@@ -306,6 +308,7 @@ class Agentenstufe:
             "schritte": z["schritte"] + 1,
             "tokens_ein": z["tokens_ein"] + a.tokens_ein,
             "tokens_aus": z["tokens_aus"] + a.tokens_aus,
+            "live_aufrufe": z["live_aufrufe"] + (0 if a.aus_cache else 1),
         }
 
     def _lesen(self, tool: str, args: Mapping[str, object]) -> object:
@@ -417,5 +420,6 @@ class Agentenstufe:
             brutto=_brutto(z.get("rechnung")),
             tokens_ein=z.get("tokens_ein", 0),
             tokens_aus=z.get("tokens_aus", 0),
+            aus_cache=z.get("extraktion_ok", False) and z.get("live_aufrufe", 1) == 0,
             latenz_ms=(time.perf_counter() - start) * 1000,
         )

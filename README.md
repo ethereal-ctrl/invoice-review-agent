@@ -45,7 +45,11 @@ uv run invoice eval --stufe regeln --split dev      # beliebig oft
 uv run invoice eval --stufe agent:nim_gross --split smoke  # Stufe 3 über NVIDIA NIM
 uv run invoice eval --stufe regeln --split test     # genau einmal pro Stufe
 uv run invoice compare runs/<lauf_a> runs/<lauf_b>  # gepaarter Bootstrap, 95-%-Intervall
+uv run invoice sensitivitaet                         # Pauschalen x0,5/x2, Fehlerquote 2/5/10 %
+scripts/testlauf.sh                                  # einmaliger Test-Lauf aller Stufen
 ```
+
+**Test-Lauf ohne zweiten Versuch.** Das Register erlaubt pro Stufe nur einen gespeicherten Test-Lauf. Damit ein Netzwerkabbruch das Ergebnis nicht verfälscht, füllt `invoice vorwaermen` zuerst den Antwort-Cache und wiederholt dabei nur Fälle mit Netz- oder Anbieterfehlern. Entscheidungen, Metriken und Gold-Labels sieht es nicht. Erst danach läuft die Stufe einmal im Replay-Modus und wird gespeichert. Die Latenz des Test-Laufs stammt aus dem Vorwärm-Bericht (`runs/vorwaermen/`), weil der Replay-Lauf nur den Cache misst.
 
 ## Schnellstart
 

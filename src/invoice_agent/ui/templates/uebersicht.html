@@ -31,7 +31,7 @@
 {% if ladder %}
 <h2>Eval-Ladder (Dev-Split, letzter Lauf je Stufe)</h2>
 <div class="rollen"><table>
-  <tr><th>Stufe</th><th class="zahl">Kosten / 100</th><th class="zahl">bei 5 % Fehlern</th><th class="zahl">Genauigkeit</th><th class="zahl">Unsichere Freigaben</th><th class="zahl">Last Mensch</th><th class="zahl">Latenz p50</th></tr>
+  <tr><th>Stufe</th><th class="zahl">Kosten / 100</th><th class="zahl">bei 5 % Fehlern</th><th class="zahl">Genauigkeit</th><th class="zahl">Unsichere Freigaben</th><th class="zahl">Last Mensch</th><th class="zahl">Latenz p50 (live)</th></tr>
   {% for z in ladder %}
   <tr>
     <td class="mono">{{ z.stufe }}</td>
@@ -40,7 +40,7 @@
     <td class="zahl">{{ "%.1f"|format(z.genauigkeit * 100) }} %</td>
     <td class="zahl">{{ z.unsichere_aktionen }}</td>
     <td class="zahl">{{ "%.1f"|format(z.last_mensch * 100) }} %</td>
-    <td class="zahl">{{ "%.1f"|format(z.latenz_p50_ms / 1000) }} s</td>
+    <td class="zahl">{% if z.latenz_live_p50_ms is not none %}{{ "%.1f"|format(z.latenz_live_p50_ms / 1000) }} s{% else %}–{% endif %}</td>
   </tr>
   {% endfor %}
 </table></div>

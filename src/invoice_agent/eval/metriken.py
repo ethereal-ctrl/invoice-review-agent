@@ -29,6 +29,7 @@ class Vorhersage(BaseModel):
     fehler: str | None = None
     policy_regel: str | None = None  # Regel der Policy-Middleware, die entschieden hat
     brutto: Decimal | None = None  # gelesener Rechnungsbetrag (für die Freigabe-Ansicht)
+    aus_cache: bool = False  # alle LLM-Antworten aus dem Cache: Latenz nicht aussagekräftig
     tokens_ein: int = 0
     tokens_aus: int = 0
     kosten_tokens_eur: Decimal = Decimal(0)
@@ -72,8 +73,9 @@ class Metriken(BaseModel):
     extraktion_fehler: int
     erkennung_pro_typ: dict[str, float]  # F-Typen: richtige Entscheidung und Typ-Code genannt
     fehlalarm_pro_typ: dict[str, float]  # H-Typen und SAUBER: nicht freigegeben
-    latenz_p50_ms: float
+    latenz_p50_ms: float  # nur über live beantwortete Fälle, falls es welche gibt
     latenz_p95_ms: float
+    anteil_cache: float = 0.0  # Anteil der Fälle, deren LLM-Antworten alle aus dem Cache kamen
     nach_layout: dict[str, dict[str, float]] = {}  # A = bekanntes, C = unbekanntes Format
 
 
@@ -119,7 +121,8 @@ def berechne(gold: Sequence[Gold], vorhersagen: Sequence[Vorhersage], k: KostenC
 
     unsicher = sum(ist_unsicher(g, v) for g, v in paare)
     eskaliert = sum(v.effektiv is E for _, v in paare)
-    latenzen = [v.latenz_ms for _, v in paare]
+    live = [v.latenz_ms for _, v in paare if not v.aus_cache]
+    latenzen = live or [v.latenz_ms for _, v in paare]
     nach_layout: dict[str, dict[str, float]] = {}
     for layout in sorted({g.layout for g, _ in paare}):
         teil = [(g, v, c) for (g, v), c in zip(paare, einzel, strict=True) if g.layout == layout]
@@ -149,5 +152,6 @@ def berechne(gold: Sequence[Gold], vorhersagen: Sequence[Vorhersage], k: KostenC
         fehlalarm_pro_typ={t: sum(w) / len(w) for t, w in sorted(fehlalarm.items())},
         latenz_p50_ms=_perzentil(latenzen, 0.50),
         latenz_p95_ms=_perzentil(latenzen, 0.95),
+        anteil_cache=sum(v.aus_cache for _, v in paare) / n,
         nach_layout=nach_layout,
     )

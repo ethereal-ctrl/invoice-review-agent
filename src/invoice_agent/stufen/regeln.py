@@ -82,6 +82,7 @@ class Regelstufe:
             interrupt=interrupt,
             policy_regel=bescheid.regel,
             brutto=re.brutto,
+            aus_cache=ex.aus_cache,
             tokens_ein=ex.tokens_ein,
             tokens_aus=ex.tokens_aus,
             kosten_tokens_eur=ex.kosten_eur,
