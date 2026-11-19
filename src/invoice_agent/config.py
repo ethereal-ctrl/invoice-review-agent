@@ -7,6 +7,8 @@ from typing import Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from invoice_agent.llm.client import LlmProfil
+
 
 class _Basis(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -48,11 +50,18 @@ class KostenConfig(_Basis):
     bootstrap_seed: int
 
 
+class LlmConfig(_Basis):
+    worker: int = Field(default=4, gt=0)
+    cache_dir: Path = Path("cache/llm")
+    profile: dict[str, LlmProfil] = {}
+
+
 class Settings(_Basis):
     toleranzen: Toleranzen
     policy: PolicyConfig
     kosten: KostenConfig
     generator: GeneratorConfig
+    llm: LlmConfig = LlmConfig()
 
 
 def lade(pfad: Path) -> Settings:

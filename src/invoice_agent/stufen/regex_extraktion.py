@@ -14,6 +14,9 @@ from pathlib import Path
 import pdfplumber
 
 from invoice_agent.model import Rechnung, RePos, UstZeile
+from invoice_agent.stufen.extraktion import Extraktion, ExtraktionsFehler
+
+__all__ = ["ExtraktionsFehler", "aus_pdf", "aus_text", "betrag", "datum", "regex_extraktion"]
 
 _BETRAG = r"(?:EUR -?\d{1,3}(?: \d{3})*,\d{2}|-?\d{1,3}(?:\.\d{3})+,\d{2} €|-?\d+,\d{2} (?:€|EUR))"
 
@@ -36,10 +39,6 @@ _MONATE = {
     "Jan.": 1, "Feb.": 2, "März": 3, "Apr.": 4, "Mai": 5, "Juni": 6,
     "Juli": 7, "Aug.": 8, "Sep.": 9, "Okt.": 10, "Nov.": 11, "Dez.": 12,
 }  # fmt: skip
-
-
-class ExtraktionsFehler(ValueError):
-    pass
 
 
 def betrag(text: str) -> Decimal:
@@ -123,3 +122,7 @@ def aus_pdf(pfad: Path) -> Rechnung:
     with pdfplumber.open(pfad) as pdf:
         text = "\n".join(seite.extract_text() or "" for seite in pdf.pages)
     return aus_text(text)
+
+
+def regex_extraktion(pfad: Path) -> Extraktion:
+    return Extraktion(rechnung=aus_pdf(pfad))

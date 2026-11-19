@@ -24,9 +24,22 @@ STANDARD_ZIEL = Path("data/v1")
 STANDARD_SPEZ = Path("docs/spezifikation.md")
 
 
+def _lade_env(pfad: Path = Path(".env")) -> None:
+    """KEY=WERT-Zeilen aus .env übernehmen; bereits gesetzte Variablen haben Vorrang."""
+    if not pfad.exists():
+        return
+    for zeile in pfad.read_text(encoding="utf-8").splitlines():
+        zeile = zeile.strip()
+        if not zeile or zeile.startswith("#") or "=" not in zeile:
+            continue
+        schluessel, _, wert = zeile.partition("=")
+        os.environ.setdefault(schluessel.strip(), wert.strip().strip('"').strip("'"))
+
+
 @app.callback()
 def main() -> None:
     """Rechnungsprüfung: Generator, Eval-Ladder, Agent."""
+    _lade_env()
 
 
 @app.command("config")
@@ -80,18 +93,25 @@ def _prozent(x: float) -> str:
 
 @app.command("eval")
 def eval_lauf(
-    stufe: Annotated[str, typer.Option("--stufe", "-s", help="b0, b1, regeln")],
+    stufe: Annotated[str, typer.Option("--stufe", "-s", help="b0, b1, regeln, llm:<profil>")],
     split: Annotated[str, typer.Option("--split", help="dev, smoke, test (Test nur einmal!)")],
     config: ConfigOption = STANDARD_CONFIG,
     daten: ZielOption = STANDARD_ZIEL,
     runs: LaeufeOption = STANDARD_LAEUFE,
+    replay: Annotated[bool, typer.Option(help="Nur Antwort-Cache, keine API-Aufrufe")] = False,
 ) -> None:
     """Eine Stufe auf einem Split auswerten und den Lauf speichern."""
     from invoice_agent.eval.laeufe import SplitBereitsVerwendet
     from invoice_agent.eval.runner import lauf
 
     try:
-        ordner, m = lauf(stufe, split, lade(config), daten, runs)
+
+        def fortschritt(i: int, n: int) -> None:
+            if i % 10 == 0 or i == n:
+                typer.echo(f"  {i}/{n}", err=True)
+
+        modus = "replay" if replay else "live"
+        ordner, m = lauf(stufe, split, lade(config), daten, runs, modus, fortschritt)
     except SplitBereitsVerwendet as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(2) from e
@@ -109,6 +129,8 @@ def eval_lauf(
     typer.echo(f"  Erkennung                  {erkennung}")
     typer.echo(f"  Fehlalarm                  {fehlalarm}")
     typer.echo(f"  Latenz p50 / p95           {m.latenz_p50_ms:.0f} / {m.latenz_p95_ms:.0f} ms")
+    if m.token_kosten_pro_100:
+        typer.echo(f"  Token-Kosten pro 100       {m.token_kosten_pro_100} € (notionell)")
     if len(m.nach_layout) > 1:
         for layout, w in m.nach_layout.items():
             typer.echo(

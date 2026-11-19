@@ -11,9 +11,10 @@ from pathlib import Path
 from invoice_agent.config import Settings
 from invoice_agent.domain import Entscheidung, entscheide
 from invoice_agent.eval.metriken import Vorhersage
-from invoice_agent.model import Rechnung, Welt
+from invoice_agent.model import Welt
 from invoice_agent.pruefung import Index, kumuliert_brutto, pruefe
-from invoice_agent.stufen.regex_extraktion import ExtraktionsFehler, aus_pdf
+from invoice_agent.stufen.extraktion import Extraktion, ExtraktionsFehler
+from invoice_agent.stufen.regex_extraktion import regex_extraktion
 
 
 class Regelstufe:
@@ -24,7 +25,7 @@ class Regelstufe:
         name: str,
         settings: Settings,
         welt: Welt,
-        extrahiere: Callable[[Path], Rechnung] = aus_pdf,
+        extrahiere: Callable[[Path], Extraktion] = regex_extraktion,
     ) -> None:
         self.name = name
         self._settings = settings
@@ -34,7 +35,7 @@ class Regelstufe:
     def entscheide(self, fall_id: str, pdf: Path) -> Vorhersage:
         start = time.perf_counter()
         try:
-            re = self._extrahiere(pdf)
+            ex = self._extrahiere(pdf)
         except ExtraktionsFehler as e:
             return Vorhersage(
                 fall_id=fall_id,
@@ -43,6 +44,7 @@ class Regelstufe:
                 fehler=str(e),
                 latenz_ms=(time.perf_counter() - start) * 1000,
             )
+        re = ex.rechnung
         codes = pruefe(re, self._idx, self._settings.toleranzen)
         entscheidung = entscheide(codes)
         grenze = self._settings.policy.freigabegrenze_eur
@@ -55,9 +57,19 @@ class Regelstufe:
             entscheidung=entscheidung,
             codes=tuple(sorted(codes)),
             interrupt=interrupt,
+            tokens_ein=ex.tokens_ein,
+            tokens_aus=ex.tokens_aus,
+            kosten_tokens_eur=ex.kosten_eur,
             latenz_ms=(time.perf_counter() - start) * 1000,
         )
 
 
 def regeln(settings: Settings, welt: Welt) -> Regelstufe:
     return Regelstufe("regeln", settings, welt)
+
+
+def llm(
+    name: str, settings: Settings, welt: Welt, extrahiere: Callable[[Path], Extraktion]
+) -> Regelstufe:
+    """Stufe 2: LLM-Extraktion, danach dieselben Regeln und dieselbe Policy wie Stufe 1."""
+    return Regelstufe(name, settings, welt, extrahiere)

@@ -23,3 +23,30 @@ generator:
   dev: 100
   test: 200
   smoke: 30                 # geschichtete Teilmenge von dev
+
+llm:
+  worker: 4                 # parallele Anfragen; der Rate Limiter pro Profil begrenzt zusätzlich
+  cache_dir: cache/llm      # Antwort-Cache, getrennt nach Provider
+  profile:
+    # Ein Profil = ein Provider + ein Modell. Ein Lauf nutzt genau ein Profil, nie gemischt.
+    # Modell-IDs der Cloud-Provider vor dem ersten Lauf prüfen (Modellliste des Providers).
+    lokal_4b:
+      provider: ollama
+      basis_url: http://localhost:11434/v1
+      modell: qwen3.5:4b
+      rpm: 600
+      timeout_s: 300
+      extra_body:
+        reasoning_effort: none   # Qwen 3.5 denkt sonst minutenlang vor der Antwort
+    nim_gross:
+      provider: nvidia
+      basis_url: https://integrate.api.nvidia.com/v1
+      modell: google/gemma-4-31b-it    # bitte prüfen
+      key_env: NVIDIA_API_KEY
+      rpm: 35
+    gemini_gross:
+      provider: gemini
+      basis_url: https://generativelanguage.googleapis.com/v1beta/openai
+      modell: gemma-4-31b-it           # bitte prüfen
+      key_env: GEMINI_API_KEY
+      rpm: 15
