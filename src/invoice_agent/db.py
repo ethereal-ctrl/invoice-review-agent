@@ -7,7 +7,7 @@ import psycopg
 from invoice_agent.model import Welt
 
 _TABELLEN = (
-    "app.entscheidungen, app.faelle, erp.re_hist_pos, erp.re_hist, erp.we_pos, "
+    "app.freigaben, app.entscheidungen, app.faelle, erp.re_hist_pos, erp.re_hist, erp.we_pos, "
     "erp.best_pos, erp.best_kopf, erp.mat_einh, erp.mat_stamm, erp.kred_stamm"
 )
 

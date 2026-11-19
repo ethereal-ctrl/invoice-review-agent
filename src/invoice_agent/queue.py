@@ -14,6 +14,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Protocol, runtime_checkable
 
 import psycopg
 
@@ -29,6 +30,14 @@ from invoice_agent.model import (
     WePos,
 )
 from invoice_agent.stufen.basis import Stufe
+
+
+@runtime_checkable
+class Fortsetzbar(Protocol):
+    """Stufe mit LangGraph-Thread (der Agent): kann nach einem interrupt fortgesetzt werden."""
+
+    def konfig(self, fall_id: str) -> dict[str, Any]: ...
+
 
 MAX_VERSUCHE = 3
 
@@ -51,28 +60,63 @@ def hole_fall(conn: psycopg.Connection) -> tuple[str, Path] | None:
     return None if zeile is None else (str(zeile[0]), Path(str(zeile[1])))
 
 
-def erledige(conn: psycopg.Connection, run_id: str, stufe: str, v: Vorhersage) -> None:
-    """Effektive Entscheidung speichern: Ein `interrupt` wird als ESKALIEREN eingetragen."""
+def erledige(
+    conn: psycopg.Connection,
+    run_id: str,
+    stufe: str,
+    v: Vorhersage,
+    thread_id: str | None = None,
+) -> None:
+    """Entscheidung speichern. Bei einem `interrupt` wartet der Fall auf einen Menschen
+    (`app.freigaben`); `thread_id` erlaubt es, den Agenten später fortzusetzen."""
     with conn.transaction():
+        if v.interrupt:
+            conn.execute(
+                """
+                INSERT INTO app.freigaben
+                    (fall_id, run_id, stufe, thread_id, vorschlag, policy_regel, brutto,
+                     grund_codes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (fall_id) DO UPDATE SET
+                    run_id = EXCLUDED.run_id, stufe = EXCLUDED.stufe,
+                    thread_id = EXCLUDED.thread_id, vorschlag = EXCLUDED.vorschlag,
+                    policy_regel = EXCLUDED.policy_regel, brutto = EXCLUDED.brutto,
+                    grund_codes = EXCLUDED.grund_codes, erstellt = now(),
+                    entschieden_von = NULL, entschieden_am = NULL, ergebnis = NULL
+                """,
+                (
+                    v.fall_id,
+                    run_id,
+                    stufe,
+                    thread_id,
+                    v.entscheidung.value,
+                    v.policy_regel,
+                    v.brutto,
+                    [c.value for c in v.codes],
+                ),
+            )
+            status = "wartet_auf_mensch"
+        else:
+            conn.execute(
+                """
+                INSERT INTO app.entscheidungen
+                    (fall_id, run_id, stufe, entscheidung, grund_codes, tokens_ein, tokens_aus)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    v.fall_id,
+                    run_id,
+                    stufe,
+                    v.effektiv.value,
+                    [c.value for c in v.codes],
+                    v.tokens_ein,
+                    v.tokens_aus,
+                ),
+            )
+            status = "erledigt"
         conn.execute(
-            """
-            INSERT INTO app.entscheidungen
-                (fall_id, run_id, stufe, entscheidung, grund_codes, tokens_ein, tokens_aus)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                v.fall_id,
-                run_id,
-                stufe,
-                v.effektiv.value,
-                [c.value for c in v.codes],
-                v.tokens_ein,
-                v.tokens_aus,
-            ),
-        )
-        conn.execute(
-            "UPDATE app.faelle SET status = 'erledigt', locked_at = NULL WHERE fall_id = %s",
-            (v.fall_id,),
+            "UPDATE app.faelle SET status = %s, locked_at = NULL WHERE fall_id = %s",
+            (status, v.fall_id),
         )
 
 
@@ -203,7 +247,12 @@ def arbeite(
                 fall_id, pdf = fall
                 try:
                     v = stufe.entscheide(fall_id, pdf)
-                    erledige(conn, run_id, stufe.name, v)
+                    thread_id = (
+                        stufe.konfig(fall_id)["configurable"]["thread_id"]
+                        if isinstance(stufe, Fortsetzbar)
+                        else None
+                    )
+                    erledige(conn, run_id, stufe.name, v, thread_id)
                 except Exception:  # Fall nicht verlieren: zurück in die Queue
                     melde_fehler(conn, fall_id)
                     bilanz.merke(fall_id, ok=False)

@@ -81,6 +81,7 @@ class Regelstufe:
             codes=tuple(sorted(codes)),
             interrupt=interrupt,
             policy_regel=bescheid.regel,
+            brutto=re.brutto,
             tokens_ein=ex.tokens_ein,
             tokens_aus=ex.tokens_aus,
             kosten_tokens_eur=ex.kosten_eur,

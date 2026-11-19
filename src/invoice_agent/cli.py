@@ -254,8 +254,14 @@ def worker(
     if frei:
         typer.echo(f"{frei} hängende Fälle wieder geöffnet.")
     audit, erp = PostgresAudit(dsn), PostgresErp(dsn)
+    pool = None
     try:
-        st = baue_stufe(stufe, settings, welt, "live", audit, run_id, erp)
+        checkpointer = None
+        if stufe.startswith("agent:"):  # Fortsetzen nach interrupt aus dem Cockpit
+            from invoice_agent.checkpoint import postgres_checkpointer
+
+            checkpointer, pool = postgres_checkpointer(dsn, anlegen=True)
+        st = baue_stufe(stufe, settings, welt, "live", audit, run_id, erp, checkpointer)
 
         def melde(v: Vorhersage) -> None:
             typer.echo(f"  {v.fall_id}  {v.effektiv.value:<14} {v.policy_regel or ''}")
@@ -264,4 +270,24 @@ def worker(
     finally:
         audit.schliesse()
         erp.schliesse()
+        if pool is not None:
+            pool.close()
     typer.echo(f"Lauf {run_id}: {len(bilanz.erledigt)} erledigt, {len(bilanz.fehler)} Fehler")
+
+
+@app.command("ui")
+def ui(
+    port: Annotated[int, typer.Option()] = 8000,
+    config: ConfigOption = STANDARD_CONFIG,
+    daten: ZielOption = STANDARD_ZIEL,
+    runs: LaeufeOption = STANDARD_LAEUFE,
+    dsn: Annotated[str | None, typer.Option("--dsn", envvar="IA_MENSCH_DSN")] = None,
+) -> None:
+    """Freigabe-Cockpit starten (Rolle ia_mensch, nur lokal: http://127.0.0.1:<port>)."""
+    import uvicorn
+
+    from invoice_agent.ui.app import erstelle_app
+
+    dsn = dsn or "postgresql://ia_mensch:ia_mensch_dev@localhost:55432/invoice"
+    app_ = erstelle_app(dsn, lade(config), daten.resolve(), runs.resolve())
+    uvicorn.run(app_, host="127.0.0.1", port=port, log_level="warning")

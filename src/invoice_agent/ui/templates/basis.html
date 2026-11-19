@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titel %}Freigabe-Cockpit{% endblock %}</title>
+<script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --flaeche: #fff; --text: #1d2330; --leise: #5d6677; --linie: #e3e6eb;
+    --akzent: #1f4fd1; --gruen: #137a43; --gruen-bg: #e5f4ec; --gelb: #8a5a00; --gelb-bg: #fdf1d8;
+    --rot: #b42318; --rot-bg: #fdeceb; --grau-bg: #eef0f3;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { background: var(--flaeche); border-bottom: 1px solid var(--linie); }
+  .leiste { max-width: 1240px; margin: 0 auto; padding: 12px 20px; display: flex; gap: 24px; align-items: center; }
+  .marke { font-weight: 650; letter-spacing: -.01em; }
+  .marke small { color: var(--leise); font-weight: 400; margin-left: 6px; }
+  nav a { color: var(--leise); text-decoration: none; margin-right: 16px; }
+  nav a:hover, nav a.aktiv { color: var(--text); }
+  main { max-width: 1240px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.01em; }
+  h2 { font-size: 15px; margin: 28px 0 10px; }
+  .unter { color: var(--leise); margin: 0 0 20px; }
+  .karten { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .karte { background: var(--flaeche); border: 1px solid var(--linie); border-radius: 8px; padding: 14px 16px; }
+  .karte .zahl { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .karte .was { color: var(--leise); font-size: 12px; }
+  .rollen { overflow-x: auto; border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; background: var(--flaeche);
+          border: 1px solid var(--linie); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--linie); vertical-align: top; }
+  th { font-size: 12px; color: var(--leise); font-weight: 600; background: #fafbfc; }
+  tr:last-child td { border-bottom: 0; }
+  td.zahl, th.zahl { text-align: right; font-variant-numeric: tabular-nums; }
+  a { color: var(--akzent); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .marker { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .FREIGEBEN, .ERLAUBT { background: var(--gruen-bg); color: var(--gruen); }
+  .ZURUECKHALTEN, .MENSCH, .wartet_auf_mensch { background: var(--gelb-bg); color: var(--gelb); }
+  .ESKALIEREN, .VERWEIGERT, .fehler { background: var(--rot-bg); color: var(--rot); }
+  .neutral, .erledigt, .offen, .in_arbeit { background: var(--grau-bg); color: var(--leise); }
+  .leer { color: var(--leise); padding: 16px; background: var(--flaeche); border: 1px dashed var(--linie); border-radius: 8px; }
+  .zwei { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+  @media (max-width: 900px) {
+    .zwei { grid-template-columns: 1fr; }
+    .zwei > .dokument { order: 2; }
+    iframe { height: 520px; }
+  }
+  iframe { width: 100%; height: 820px; border: 1px solid var(--linie); border-radius: 8px; background: #fff; }
+  .box { background: var(--flaeche); border: 1px solid var(--linie); border-radius: 8px; padding: 16px; }
+  .box.hinweis { border-color: #f0d9a6; background: #fffaf0; }
+  input[type=text] { padding: 7px 10px; border: 1px solid var(--linie); border-radius: 6px; font: inherit; width: 220px; }
+  button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; font-weight: 600; }
+  button.ja { background: var(--gruen); color: #fff; }
+  button.nein { background: #fff; color: var(--rot); border-color: #f1b8b3; }
+  .zeile { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .spur td:first-child { white-space: nowrap; color: var(--leise); }
+  form.filter { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+</style>
+<script>
+  document.addEventListener("htmx:beforeSwap", function (e) {
+    if (e.detail.xhr.status === 409) { e.detail.shouldSwap = true; e.detail.isError = false; }
+  });
+</script>
+</head>
+<body>
+<header><div class="leiste">
+  <div class="marke">Rechnungsprüfung<small>Freigabe-Cockpit</small></div>
+  <nav>
+    <a href="/" class="{{ 'aktiv' if request.url.path == '/' }}">Übersicht</a>
+    <a href="/audit" class="{{ 'aktiv' if request.url.path.startswith('/audit') }}">Audit-Log</a>
+  </nav>
+</div></header>
+<main>{% block inhalt %}{% endblock %}</main>
+</body>
+</html>

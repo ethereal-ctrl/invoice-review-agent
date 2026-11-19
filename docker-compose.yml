@@ -6,6 +6,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ia_owner_dev}
       POSTGRES_DB: ${POSTGRES_DB:-invoice}
       IA_AGENT_PASSWORD: ${IA_AGENT_PASSWORD:-ia_agent_dev}
+      IA_MENSCH_PASSWORD: ${IA_MENSCH_PASSWORD:-ia_mensch_dev}
     ports:
       - "55432:5432"
     volumes:

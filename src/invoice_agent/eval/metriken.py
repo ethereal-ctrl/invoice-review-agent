@@ -28,6 +28,7 @@ class Vorhersage(BaseModel):
     extraktion_ok: bool = True
     fehler: str | None = None
     policy_regel: str | None = None  # Regel der Policy-Middleware, die entschieden hat
+    brutto: Decimal | None = None  # gelesener Rechnungsbetrag (für die Freigabe-Ansicht)
     tokens_ein: int = 0
     tokens_aus: int = 0
     kosten_tokens_eur: Decimal = Decimal(0)

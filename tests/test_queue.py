@@ -8,9 +8,10 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from invoice_agent import db, queue
+from invoice_agent import db, mensch, queue
 from invoice_agent.audit import PostgresAudit
 from invoice_agent.config import Settings, lade
+from invoice_agent.domain import Entscheidung
 from invoice_agent.eval.metriken import Vorhersage
 from invoice_agent.generator.faelle import Ergebnis, erzeuge
 from invoice_agent.generator.render import render, waehle_variante
@@ -24,6 +25,9 @@ OWNER_DSN = os.environ.get(
 )
 AGENT_DSN = os.environ.get(
     "IA_AGENT_DSN", "postgresql://ia_agent:ia_agent_dev@localhost:55432/invoice"
+)
+MENSCH_DSN = os.environ.get(
+    "IA_MENSCH_DSN", "postgresql://ia_mensch:ia_mensch_dev@localhost:55432/invoice"
 )
 ANZAHL = 24
 
@@ -103,20 +107,43 @@ def test_worker_arbeitet_alles_genau_einmal_ab(
         audit.schliesse()
 
     assert len(bilanz.erledigt) == ANZAHL and len(set(bilanz.erledigt)) == ANZAHL
-    assert _status(owner) == {"erledigt": ANZAHL}
+    direkt = regeln(settings, ergebnis.welt)
+    erwartet = {
+        f.fall_id: direkt.entscheide(f.fall_id, eingang / f"{f.fall_id}.pdf")
+        for f in ergebnis.faelle[:ANZAHL]
+    }
+    wartend = {k for k, v in erwartet.items() if v.interrupt}
+    assert wartend, "Testdaten sollten mindestens einen Fall über der Grenze enthalten"
+    assert _status(owner) == {"erledigt": ANZAHL - len(wartend), "wartet_auf_mensch": len(wartend)}
     zeilen = owner.execute(
         "SELECT fall_id, entscheidung FROM app.entscheidungen WHERE run_id = %s", (run_id,)
     ).fetchall()
-    assert len(zeilen) == ANZAHL
-
-    # Gleiche Entscheidungen wie die Stufe direkt auf der Welt aus den Dateien
-    direkt = regeln(settings, ergebnis.welt)
-    for fall_id, entscheidung in zeilen:
-        assert direkt.entscheide(fall_id, eingang / f"{fall_id}.pdf").effektiv.value == entscheidung
+    assert {f: e for f, e in zeilen} == {
+        k: v.effektiv.value for k, v in erwartet.items() if k not in wartend
+    }
+    offen = owner.execute("SELECT fall_id, brutto FROM app.freigaben WHERE ergebnis IS NULL")
+    assert {f for f, _ in offen.fetchall()} == wartend
     protokoll = owner.execute(
         "SELECT count(*) FROM audit.ereignisse WHERE run_id = %s", (run_id,)
     ).fetchone()
     assert protokoll == (ANZAHL,)
+
+    # Ein Mensch entscheidet (Rolle ia_mensch); doppelt entscheiden geht nicht.
+    fall_id = sorted(wartend)[0]
+    with psycopg.connect(MENSCH_DSN) as conn:
+        with pytest.raises(mensch.FreigabeFehler):
+            mensch.entscheide(conn, fall_id, freigeben=True, von="  ")
+        assert mensch.entscheide(conn, fall_id, True, "S. Prüfer") is Entscheidung.FREIGEBEN
+        with pytest.raises(mensch.FreigabeFehler):
+            mensch.entscheide(conn, fall_id, False, "Jemand anderes")
+        eintrag = conn.execute(
+            "SELECT knoten, ergebnis, args_geschwaerzt->>'von' FROM audit.ereignisse "
+            "WHERE fall_id = %s AND knoten = 'mensch' AND run_id = %s",
+            (fall_id, run_id),
+        ).fetchall()
+    assert eintrag == [("mensch", "FREIGEBEN", "S. Prüfer")]
+    status = owner.execute("SELECT status FROM app.faelle WHERE fall_id = %s", (fall_id,))
+    assert status.fetchone() == ("erledigt",)
 
 
 class _Kaputt:
@@ -146,3 +173,73 @@ def test_haengende_faelle_werden_wieder_geoeffnet(owner: psycopg.Connection) -> 
         )
         assert queue.gib_haengende_frei(agent, minuten=30) == 1
     assert _status(owner) == {"offen": ANZAHL}
+
+
+def test_agent_wird_von_anderem_prozess_fortgesetzt(
+    owner: psycopg.Connection, settings: Settings, ergebnis: Ergebnis, eingang: Path, tmp_path: Path
+) -> None:
+    """Worker (ia_agent) hält an der Grenze an; das Cockpit (ia_mensch) setzt den Graphen fort."""
+    import json
+
+    import httpx
+    from psycopg_pool import ConnectionPool
+
+    from invoice_agent.checkpoint import postgres_checkpointer
+    from invoice_agent.erp import WeltErp
+    from invoice_agent.llm.client import ChatClient, LlmProfil
+    from invoice_agent.stufen.agent import Agentenstufe
+    from invoice_agent.stufen.llm_extraktion import LlmExtraktion
+
+    direkt = regeln(settings, ergebnis.welt)
+    fall = next(
+        f
+        for f in ergebnis.faelle[:ANZAHL]
+        if direkt.entscheide(f.fall_id, eingang / f"{f.fall_id}.pdf").interrupt
+    )
+
+    def llm(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if "tools" not in body:
+            d = fall.rechnung.model_dump(mode="json")
+            d.pop("freitext")
+            msg: dict[str, object] = {"content": json.dumps(d)}
+        else:
+            args = json.dumps({"fall_id": fall.fall_id})
+            msg = {
+                "content": None,
+                "tool_calls": [
+                    {"id": "c0", "type": "function",
+                     "function": {"name": "freigeben", "arguments": args}}
+                ],
+            }  # fmt: skip
+        return httpx.Response(200, json={"choices": [{"message": msg}], "usage": {}})
+
+    def stufe(dsn: str, anlegen: bool, cache: Path) -> tuple[Agentenstufe, ConnectionPool]:
+        saver, pool = postgres_checkpointer(dsn, anlegen=anlegen)
+        profil = LlmProfil(provider="fake", basis_url="http://fake/v1", modell="m", rpm=10_000)
+        client = ChatClient(profil, cache, transport=httpx.MockTransport(llm))
+        a = Agentenstufe(
+            "agent:fake", settings, ergebnis.welt, client, LlmExtraktion(client),
+            WeltErp(ergebnis.welt), run_id=run_id, checkpointer=saver,
+        )  # fmt: skip
+        return a, pool
+
+    run_id = f"test-fortsetzen-{os.getpid()}"
+    worker, pool_a = stufe(AGENT_DSN, True, tmp_path / "a")
+    v = worker.entscheide(fall.fall_id, eingang / f"{fall.fall_id}.pdf")
+    assert v.interrupt
+    thread_id = worker.konfig(fall.fall_id)["configurable"]["thread_id"]
+    with psycopg.connect(AGENT_DSN) as conn:
+        queue.erledige(conn, run_id, worker.name, v, thread_id)
+    pool_a.close()
+
+    cockpit, pool_b = stufe(MENSCH_DSN, False, tmp_path / "b")  # neuer Prozess, neue Rolle
+    with psycopg.connect(MENSCH_DSN) as conn:
+        mensch.entscheide(
+            conn, fall.fall_id, True, "S. Prüfer",
+            fortsetzen=lambda _stufe, tid, frei: cockpit.fortsetzen(tid, frei),
+        )  # fmt: skip
+    zustand = cockpit.graph.get_state({"configurable": {"thread_id": thread_id}})
+    pool_b.close()
+    assert zustand.values["entscheidung"] == "FREIGEBEN"
+    assert not zustand.next  # Graph ist zu Ende gelaufen

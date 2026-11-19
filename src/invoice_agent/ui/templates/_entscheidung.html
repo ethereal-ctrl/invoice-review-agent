@@ -1,0 +1,9 @@
+<div id="entscheidung" class="box {{ 'hinweis' if not ergebnis }}">
+  {% if ergebnis %}
+    <strong>Entschieden:</strong> <span class="marker {{ ergebnis.value }}">{{ ergebnis.value }}</span>
+    von {{ name }}. Fall geschlossen, Eintrag im Audit-Log geschrieben.
+    <div class="zeile"><a href="/fall/{{ fall_id }}">Spur neu laden</a> · <a href="/">Zur Übersicht</a></div>
+  {% else %}
+    <strong>Nicht möglich:</strong> {{ fehler }}
+  {% endif %}
+</div>

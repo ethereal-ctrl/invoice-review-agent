@@ -18,9 +18,11 @@ Graph:  extrahieren -> agent <-> werkzeuge -> (mensch) -> Ende
 import json
 import time
 from collections.abc import Callable, Mapping
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal, TypedDict, cast
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
@@ -156,6 +158,10 @@ class Zustand(TypedDict, total=False):
     tokens_aus: int
 
 
+def _brutto(rechnung: Mapping[str, Any] | None) -> Decimal | None:
+    return None if rechnung is None else Decimal(str(rechnung["brutto"]))
+
+
 def _codes(args: Mapping[str, object]) -> list[str]:
     roh = args.get("codes")
     if not isinstance(roh, list):
@@ -175,9 +181,13 @@ class Agentenstufe:
         erp: Erp,
         audit: Audit | None = None,
         run_id: str = "lokal",
+        checkpointer: BaseCheckpointSaver[Any] | None = None,
     ) -> None:
+        """`checkpointer`: im Eval-Lauf im Speicher, im Betrieb Postgres (Fortsetzen nach
+        der Freigabe durch einen Menschen, auch aus einem anderen Prozess)."""
         self.name = name
         self._client = client
+        self._checkpointer = checkpointer if checkpointer is not None else InMemorySaver()
         self._extrahiere = extrahiere
         self._erp = erp
         self._audit = audit if audit is not None else SpeicherAudit()
@@ -203,7 +213,7 @@ class Agentenstufe:
         g.add_conditional_edges("extrahieren", self._weiter, ["agent", END])
         g.add_conditional_edges("agent", self._weiter, ["agent", "werkzeuge", END])
         g.add_edge("mensch", END)
-        return g.compile(checkpointer=InMemorySaver())
+        return g.compile(checkpointer=self._checkpointer)
 
     @staticmethod
     def _weiter(z: Zustand) -> str:
@@ -350,7 +360,8 @@ class Agentenstufe:
         freigegeben = (
             isinstance(antwort, dict) and cast(dict[str, object], antwort).get("freigeben") is True
         )
-        entscheidung = Entscheidung.FREIGEBEN if freigegeben else Entscheidung.ESKALIEREN
+        # Ein Mensch hat geprüft: Freigabe oder Zahlung stoppen (nicht noch einmal eskalieren).
+        entscheidung = Entscheidung.FREIGEBEN if freigegeben else Entscheidung.ZURUECKHALTEN
         self._audit.schreibe(
             Ereignis(
                 run_id=self._run_id,
@@ -380,6 +391,11 @@ class Agentenstufe:
     def konfig(self, fall_id: str) -> dict[str, Any]:
         return {"configurable": {"thread_id": f"{self._run_id}:{fall_id}"}, "recursion_limit": 60}
 
+    def fortsetzen(self, thread_id: str, freigeben: bool) -> None:
+        """Nach der Entscheidung eines Menschen weiterlaufen lassen (Knoten `mensch`)."""
+        konfig = {"configurable": {"thread_id": thread_id}}
+        self.graph.invoke(Command(resume={"freigeben": freigeben}), konfig)
+
     def entscheide(self, fall_id: str, pdf: Path) -> Vorhersage:
         start = time.perf_counter()
         konfig = self.konfig(fall_id)
@@ -396,6 +412,7 @@ class Agentenstufe:
             extraktion_ok=z.get("extraktion_ok", False),
             fehler=z.get("fehler"),
             policy_regel=z.get("policy_regel"),
+            brutto=_brutto(z.get("rechnung")),
             tokens_ein=z.get("tokens_ein", 0),
             tokens_aus=z.get("tokens_aus", 0),
             latenz_ms=(time.perf_counter() - start) * 1000,

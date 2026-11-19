@@ -22,6 +22,7 @@ Eingehende Rechnungen werden gegen Bestellung, Wareneingang und Stammdaten gepr�
 | Stufe 3 (Agent mit Tools, LangGraph, `interrupt` für Freigaben über der Grenze) | ✅ |
 | Angriffsset A1–A12 mit Gate in der CI | ✅ |
 | Postgres-Queue (SKIP LOCKED) und Worker als Rolle `ia_agent` | ✅ |
+| Freigabe-Cockpit (FastAPI + HTMX), Fortsetzen des Agenten über Postgres-Checkpointer | ✅ |
 
 ## Eval-Ladder
 
@@ -94,6 +95,20 @@ uv run invoice worker --stufe regeln --threads 4          # 300 Fälle in ~5 s
 uv run invoice worker --stufe agent:nim_gross --maximal 10
 ```
 
+**Freigabe durch einen Menschen.** Will eine Stufe über der Freigabegrenze freigeben, hält die Policy an: Der Fall bekommt den Status `wartet_auf_mensch`, der LangGraph-Zustand des Agenten liegt im Postgres-Checkpointer (Schema `lg`). Im Cockpit entscheidet ein Mensch (Rolle `ia_mensch`). Der Graph läuft in einem anderen Prozess an derselben Stelle weiter, und die Entscheidung landet mit Namen im Audit-Log.
+
+```bash
+uv run invoice ui          # http://127.0.0.1:8000
+```
+
+| Seite | Inhalt |
+|---|---|
+| Übersicht | Queue-Status, offene Freigaben, Eval-Ladder des letzten Dev-Laufs, letzte Entscheidungen |
+| Fall | Rechnung als PDF, Vorschlag und Policy-Regel, Freigeben oder Zurückhalten, Spur des Laufs |
+| Audit-Log | alle Einträge, filterbar nach Fall und Lauf |
+
+Das Cockpit zeigt nie Gold-Labels und hat bewusst kein Login. Der Name der entscheidenden Person wird eingetragen, deshalb ist es nur für den lokalen Betrieb gedacht.
+
 ## Angriffe
 
 Zwölf Angriffe ([generator/angriffe.py](src/invoice_agent/generator/angriffe.py)) laufen gegen jede Stufe. Sie bauen auf einer Kopie der Hauptwelt auf, der Hauptdatensatz bleibt bytegleich. Hartes Kriterium: **keine automatische Freigabe**.
@@ -133,4 +148,5 @@ Synthetische Daten, ein PDF-Layout, nur EUR, kein Skonto. Die Taxonomie orientie
 
 - Die Regex-Extraktion von Stufe 1 kennt Layout A vollständig. Ihr Ergebnis auf Layout A ist darum eine Obergrenze und kein fairer Vergleich. Aussagekräftig ist Layout C im Test-Split.
 - Die Token-Kosten stehen auf 0 €, weil das genutzte NVIDIA-NIM-Kontingent kostenlos ist. Ein Betrieb mit bezahlter API würde die Kosten pro 100 Rechnungen für die LLM-Stufen erhöhen.
+- Das Freigabe-Cockpit hat kein Login und keinen CSRF-Schutz und lauscht nur auf 127.0.0.1.
 - Text für das LLM wird nicht pseudonymisiert. Die Rechnungen sind synthetisch, und die Lieferanten sind Firmen. Geschwärzt wird im Audit-Log.

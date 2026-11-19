@@ -1,0 +1,64 @@
+{% extends "basis.html" %}
+{% block inhalt %}
+<h1>Übersicht</h1>
+<p class="unter">Stand der Queue und Fälle, die die Policy einem Menschen vorgelegt hat.</p>
+
+<div class="karten">
+  {% for s in ["offen", "in_arbeit", "wartet_auf_mensch", "erledigt", "fehler"] %}
+  <div class="karte"><div class="zahl">{{ status.get(s, 0) }}</div><div class="was">{{ s.replace("_", " ") }}</div></div>
+  {% endfor %}
+</div>
+
+<h2>Wartet auf Freigabe ({{ offene|length }})</h2>
+{% if offene %}
+<div class="rollen"><table>
+  <tr><th>Fall</th><th>Stufe</th><th>Vorschlag</th><th>Grund</th><th class="zahl">Brutto</th><th>Seit</th></tr>
+  {% for f in offene %}
+  <tr>
+    <td><a href="/fall/{{ f.fall_id }}">{{ f.fall_id }}</a></td>
+    <td class="mono">{{ f.stufe }}</td>
+    <td><span class="marker {{ f.vorschlag }}">{{ f.vorschlag }}</span></td>
+    <td class="mono">{{ f.policy_regel }}</td>
+    <td class="zahl">{{ "{:,.2f}".format(f.brutto).replace(",", "X").replace(".", ",").replace("X", ".") if f.brutto is not none else "–" }} €</td>
+    <td>{{ f.erstellt.strftime("%d.%m. %H:%M") }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<div class="leer">Keine offenen Freigaben. Starte einen Worker: <code>uv run invoice worker --stufe regeln</code></div>
+{% endif %}
+
+{% if ladder %}
+<h2>Eval-Ladder (Dev-Split, letzter Lauf je Stufe)</h2>
+<div class="rollen"><table>
+  <tr><th>Stufe</th><th class="zahl">Kosten / 100</th><th class="zahl">bei 5 % Fehlern</th><th class="zahl">Genauigkeit</th><th class="zahl">Unsichere Freigaben</th><th class="zahl">Last Mensch</th><th class="zahl">Latenz p50</th></tr>
+  {% for z in ladder %}
+  <tr>
+    <td class="mono">{{ z.stufe }}</td>
+    <td class="zahl">{{ "%.2f"|format(z.kosten_pro_100|float) }} €</td>
+    <td class="zahl">{{ "%.2f"|format(z.kosten_pro_100_real|float) }} €</td>
+    <td class="zahl">{{ "%.1f"|format(z.genauigkeit * 100) }} %</td>
+    <td class="zahl">{{ z.unsichere_aktionen }}</td>
+    <td class="zahl">{{ "%.1f"|format(z.last_mensch * 100) }} %</td>
+    <td class="zahl">{{ "%.1f"|format(z.latenz_p50_ms / 1000) }} s</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2>Letzte Entscheidungen</h2>
+{% if letzte %}
+<div class="rollen"><table>
+  <tr><th>Fall</th><th>Stufe</th><th>Entscheidung</th><th>Codes</th><th>Zeit</th></tr>
+  {% for e in letzte %}
+  <tr>
+    <td><a href="/fall/{{ e.fall_id }}">{{ e.fall_id }}</a></td>
+    <td class="mono">{{ e.stufe }}</td>
+    <td><span class="marker {{ e.entscheidung }}">{{ e.entscheidung }}</span></td>
+    <td class="mono">{{ e.grund_codes|join(", ") or "–" }}</td>
+    <td>{{ e.erstellt.strftime("%d.%m. %H:%M:%S") }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="leer">Noch keine Entscheidungen.</div>{% endif %}
+{% endblock %}

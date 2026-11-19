@@ -1,0 +1,29 @@
+{% extends "basis.html" %}
+{% block titel %}Audit-Log · Freigabe-Cockpit{% endblock %}
+{% block inhalt %}
+<h1>Audit-Log</h1>
+<p class="unter">Append-only: Jede Aktion, die eine Stufe beantragt hat, mit geschwärzten Argumenten. Die letzten 300 Einträge.</p>
+<form class="filter" method="get">
+  <input type="text" name="fall_id" value="{{ fall_id }}" placeholder="Fall, z.B. FALL-0012">
+  <input type="text" name="run_id" value="{{ run_id }}" placeholder="Lauf">
+  <button class="ja" type="submit">Filtern</button>
+  {% if fall_id or run_id %}<a href="/audit" style="align-self:center">zurücksetzen</a>{% endif %}
+</form>
+{% if zeilen %}
+<div class="rollen"><table>
+  <tr><th class="zahl">#</th><th>Zeit</th><th>Fall</th><th>Knoten</th><th>Tool</th><th>Regel</th><th>Ergebnis</th><th>Lauf</th></tr>
+  {% for e in zeilen %}
+  <tr>
+    <td class="zahl mono">{{ e.id }}</td>
+    <td class="mono">{{ e.ts.strftime("%d.%m. %H:%M:%S") }}</td>
+    <td>{% if e.fall_id %}<a href="/fall/{{ e.fall_id }}">{{ e.fall_id }}</a>{% endif %}</td>
+    <td class="mono">{{ e.knoten }}</td>
+    <td class="mono">{{ e.tool or "–" }}</td>
+    <td class="mono">{{ e.policy_regel or "" }}</td>
+    <td>{% if e.knoten == "agent" %}<span class="mono">{{ e.ergebnis }}</span>{% else %}<span class="marker {{ e.ergebnis }}">{{ e.ergebnis }}</span>{% endif %}</td>
+    <td class="mono"><a href="/audit?run_id={{ e.run_id }}">{{ e.run_id }}</a></td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="leer">Keine Einträge für diesen Filter.</div>{% endif %}
+{% endblock %}

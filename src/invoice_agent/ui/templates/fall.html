@@ -1,0 +1,67 @@
+{% extends "basis.html" %}
+{% block titel %}{{ fall.fall_id }} · Freigabe-Cockpit{% endblock %}
+{% block inhalt %}
+<h1>{{ fall.fall_id }} <span class="marker {{ fall.status }}">{{ fall.status.replace("_", " ") }}</span></h1>
+<p class="unter">Versuche: {{ fall.versuche }} · eingegangen {{ fall.erstellt.strftime("%d.%m.%Y %H:%M") }}</p>
+
+<div class="zwei">
+  <div class="dokument">
+    <iframe src="/fall/{{ fall.fall_id }}/pdf" title="Rechnung {{ fall.fall_id }}"></iframe>
+    <p><a href="/fall/{{ fall.fall_id }}/pdf" target="_blank" rel="noopener">PDF in neuem Tab öffnen</a></p>
+  </div>
+  <div>
+    {% if freigabe and freigabe.ergebnis is none %}
+    <div id="entscheidung" class="box hinweis">
+      <strong>Freigabe durch einen Menschen nötig</strong>
+      <p style="margin:6px 0 0">Die Stufe <code>{{ freigabe.stufe }}</code> schlägt
+        <span class="marker {{ freigabe.vorschlag }}">{{ freigabe.vorschlag }}</span> vor.
+        Die Policy hat angehalten: <code>{{ freigabe.policy_regel }}</code>
+        {% if freigabe.brutto is not none %}(Brutto {{ "%.2f"|format(freigabe.brutto|float) }} €, kumuliert pro Bestellung über der Freigabegrenze){% endif %}.</p>
+      <form hx-post="/fall/{{ fall.fall_id }}/entscheidung" hx-target="#entscheidung" hx-swap="outerHTML"
+            method="post" action="/fall/{{ fall.fall_id }}/entscheidung">
+        <div class="zeile">
+          <input type="text" name="name" placeholder="Ihr Name" required>
+          <button class="ja" name="aktion" value="freigeben">Freigeben</button>
+          <button class="nein" name="aktion" value="zurueckhalten">Zurückhalten</button>
+        </div>
+      </form>
+    </div>
+    {% elif freigabe %}
+    <div class="box">Von <strong>{{ freigabe.entschieden_von }}</strong> entschieden am
+      {{ freigabe.entschieden_am.strftime("%d.%m.%Y %H:%M") }}:
+      <span class="marker {{ freigabe.ergebnis }}">{{ freigabe.ergebnis }}</span></div>
+    {% endif %}
+
+    <h2>Entscheidungen</h2>
+    {% if entscheidungen %}
+    <div class="rollen"><table>
+      <tr><th>Stufe</th><th>Entscheidung</th><th>Codes</th><th class="zahl">Tokens</th></tr>
+      {% for e in entscheidungen %}
+      <tr><td class="mono">{{ e.stufe }}</td><td><span class="marker {{ e.entscheidung }}">{{ e.entscheidung }}</span></td>
+          <td class="mono">{{ e.grund_codes|join(", ") or "–" }}</td>
+          <td class="zahl">{{ (e.tokens_ein or 0) + (e.tokens_aus or 0) }}</td></tr>
+      {% endfor %}
+    </table></div>
+    {% else %}<div class="leer">Noch keine Entscheidung gespeichert.</div>{% endif %}
+
+    <h2>Spur (Audit-Log)</h2>
+    {% if lauf %}<p class="unter" style="margin-bottom:8px">Lauf <code>{{ lauf }}</code></p>{% endif %}
+    {% if spur %}
+    <div class="rollen"><table class="spur">
+      <tr><th>Zeit</th><th>Knoten</th><th>Aktion</th><th>Regel / Ergebnis</th></tr>
+      {% for e in spur %}
+      <tr>
+        <td class="mono">{{ e.ts.strftime("%H:%M:%S") }}</td>
+        <td class="mono">{{ e.knoten }}</td>
+        <td class="mono">{% if e.knoten == "agent" %}LLM → {{ e.ergebnis }}{% else %}{{ e.tool or "–" }}{% endif %}
+          {% if e.args_geschwaerzt %}<br><span style="color:var(--leise)">{{ e.args_geschwaerzt|json }}</span>{% endif %}</td>
+        <td>{% if e.knoten != "agent" %}<span class="marker {{ e.ergebnis }}">{{ e.ergebnis }}</span>{% endif %}
+          <span class="mono">{{ e.policy_regel or "" }}</span></td>
+      </tr>
+      {% endfor %}
+    </table></div>
+    <p><a href="/audit?fall_id={{ fall.fall_id }}">Alle Läufe dieses Falls im Audit-Log</a></p>
+    {% else %}<div class="leer">Keine Einträge.</div>{% endif %}
+  </div>
+</div>
+{% endblock %}
