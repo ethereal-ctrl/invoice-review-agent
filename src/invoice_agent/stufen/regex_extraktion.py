@@ -23,7 +23,9 @@ _BETRAG = r"(?:EUR -?\d{1,3}(?: \d{3})*,\d{2}|-?\d{1,3}(?:\.\d{3})+,\d{2} €|-?
 _KOPF = {
     "re_nr": r"(?:Rechnungsnummer|Rechnungsnr\.|Beleg-Nr\.|Invoice No\.):[ ]*(.+?)[ ]*$",
     "datum": r"(?:Rechnungsdatum|Belegdatum|Invoice Date|Datum):[ ]*(.+?)[ ]*$",
-    "best_nr": r"(?:Bestellnr\.|Ihre Bestellung|Auftragsnr\.|PO):[ ]*(\d+)",
+    # Ganzes Feld bis Zeilenende: Nur die Ziffern zu lesen hätte "4500…'; DROP …" zu einer
+    # gültigen Bestellnummer gekürzt (gefunden durch Angriff A9).
+    "best_nr": r"(?:Bestellnr\.|Ihre Bestellung|Auftragsnr\.|PO):[ ]*(.+?)[ ]*$",
     "ust_id": r"(?:USt-IdNr\.|USt-ID|VAT ID):[ ]*([A-Z]{2}[0-9A-Z]+)",
     "iban": r"(?:Konto \(IBAN\)|Bankverbindung IBAN|IBAN):[ ]*([A-Z]{2}\d{2}[0-9A-Z]+)",
 }

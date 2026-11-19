@@ -18,7 +18,7 @@ from invoice_agent.stufen.llm_extraktion import LlmExtraktion
 from invoice_agent.stufen.regeln import llm, regeln
 
 STUFEN = ("b0", "b1", "regeln", "llm:<profil>", "agent:<profil>")
-SPLITS = ("dev", "test", "smoke")
+SPLITS = ("dev", "test", "smoke", "angriffe")
 
 
 def _client(settings: Settings, profil_name: str, modus: Modus) -> ChatClient:
@@ -59,7 +59,7 @@ def baue_stufe(
 def auswahl(gold: list[Gold], split: str) -> list[Gold]:
     if split == "smoke":
         return [g for g in gold if g.smoke]
-    if split in ("dev", "test"):
+    if split in ("dev", "test", "angriffe"):
         return [g for g in gold if g.split == split]
     raise ValueError(f"Unbekannter Split {split!r}")
 

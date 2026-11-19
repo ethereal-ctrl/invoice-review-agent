@@ -22,6 +22,7 @@ SpezOption = Annotated[Path, typer.Option("--spezifikation", exists=True, dir_ok
 STANDARD_CONFIG = Path("configs/default.yaml")
 STANDARD_ZIEL = Path("data/v1")
 STANDARD_SPEZ = Path("docs/spezifikation.md")
+STANDARD_ANGRIFFE = Path("data/v1/angriffe")
 
 
 def _lade_env(pfad: Path = Path(".env")) -> None:
@@ -99,6 +100,9 @@ def eval_lauf(
     daten: ZielOption = STANDARD_ZIEL,
     runs: LaeufeOption = STANDARD_LAEUFE,
     replay: Annotated[bool, typer.Option(help="Nur Antwort-Cache, keine API-Aufrufe")] = False,
+    max_unsicher: Annotated[
+        int | None, typer.Option(help="Gate: Exit-Code 1 bei mehr unsicheren Aktionen")
+    ] = None,
 ) -> None:
     """Eine Stufe auf einem Split auswerten und den Lauf speichern."""
     from invoice_agent.eval.laeufe import SplitBereitsVerwendet
@@ -139,6 +143,9 @@ def eval_lauf(
                 f"unsicher {_prozent(w['rate_unsicher'])}, "
                 f"Extraktionsfehler {int(w['extraktion_fehler'])}"
             )
+    if max_unsicher is not None and m.unsichere_aktionen > max_unsicher:
+        typer.echo(f"Gate verletzt: {m.unsichere_aktionen} unsichere Aktionen", err=True)
+        raise typer.Exit(1)
 
 
 @app.command("compare")
@@ -169,3 +176,48 @@ def compare(
             f"  {v.kennzahl:<16} A {v.a:10.3f}  B {v.b:10.3f}  "
             f"B-A {v.differenz:+10.3f}  95 % [{v.unten:+.3f}, {v.oben:+.3f}]{stern}"
         )
+
+
+@app.command("angriffe-erzeugen")
+def angriffe_erzeugen(
+    config: ConfigOption = STANDARD_CONFIG,
+    out: ZielOption = STANDARD_ANGRIFFE,
+) -> None:
+    """Angriffsset A1-A12 auf einer Kopie der Hauptwelt erzeugen (Hauptdaten bleiben gleich)."""
+    from invoice_agent.generator.angriffe import erzeuge_angriffe, schreibe_angriffe
+    from invoice_agent.generator.faelle import erzeuge
+
+    settings = lade(config)
+    a = erzeuge_angriffe(settings, erzeuge(settings))
+    manifest = schreibe_angriffe(a, settings, out)
+    typer.echo(f"{manifest['anzahl']} Angriffe nach {out} geschrieben.")
+
+
+@app.command("angriffe")
+def angriffe_lauf(
+    stufe: Annotated[str, typer.Option("--stufe", "-s", help="b0, regeln, llm:<p>, agent:<p>")],
+    config: ConfigOption = STANDARD_CONFIG,
+    daten: ZielOption = STANDARD_ANGRIFFE,
+    runs: LaeufeOption = STANDARD_LAEUFE,
+    replay: Annotated[bool, typer.Option(help="Nur Antwort-Cache, keine API-Aufrufe")] = False,
+) -> None:
+    """Alle Angriffe gegen eine Stufe laufen lassen. Exit-Code 1, wenn einer durchkommt."""
+    from invoice_agent.eval.angriffe import bewerte
+    from invoice_agent.eval.laeufe import lade_vorhersagen
+    from invoice_agent.eval.runner import lauf
+    from invoice_agent.generator.angriffe import lade_angriffe
+
+    modus = "replay" if replay else "live"
+    ordner, _ = lauf(stufe, "angriffe", lade(config), daten, runs, modus)
+    befunde = bewerte(lade_angriffe(daten / "eval" / "angriffe.jsonl"), lade_vorhersagen(ordner))
+    typer.echo(f"Lauf: {ordner}")
+    for b in befunde:
+        zeichen = "ok  " if b.bestanden else "FREI"
+        typer.echo(
+            f"  {zeichen} {b.angriff.nr:<4} {b.angriff.titel:<52} "
+            f"{b.vorhersage.effektiv.value:<14} {b.schicht}"
+        )
+    durch = sum(not b.bestanden for b in befunde)
+    typer.echo(f"Automatische Freigaben: {durch} von {len(befunde)}")
+    if durch:
+        raise typer.Exit(1)

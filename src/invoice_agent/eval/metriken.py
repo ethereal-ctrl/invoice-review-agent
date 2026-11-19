@@ -113,9 +113,8 @@ def berechne(gold: Sequence[Gold], vorhersagen: Sequence[Vorhersage], k: KostenC
     for g, v in paare:
         if g.entscheidung is F:
             fehlalarm[g.typ].append(v.effektiv is not F)
-        else:
-            typ_code = Code(g.typ)
-            erkannt[g.typ].append(v.effektiv == g.entscheidung and typ_code in v.codes)
+        elif g.typ in Code.__members__:  # Angriffe (A1-A12) haben keinen Fehlertyp-Code
+            erkannt[g.typ].append(v.effektiv == g.entscheidung and Code(g.typ) in v.codes)
 
     unsicher = sum(ist_unsicher(g, v) for g, v in paare)
     eskaliert = sum(v.effektiv is E for _, v in paare)

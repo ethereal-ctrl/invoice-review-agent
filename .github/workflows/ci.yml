@@ -31,3 +31,14 @@ jobs:
 
       - name: Tests
         run: uv run pytest
+
+      - name: Daten erzeugen (deterministisch)
+        run: |
+          uv run invoice generate
+          uv run invoice angriffe-erzeugen
+
+      - name: "Gate: Angriffe gegen Stufe 1 (keine automatische Freigabe)"
+        run: uv run invoice angriffe --stufe regeln
+
+      - name: "Gate: Smoke Set Stufe 1"
+        run: uv run invoice eval --stufe regeln --split smoke --max-unsicher 0

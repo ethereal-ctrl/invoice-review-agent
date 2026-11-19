@@ -128,7 +128,8 @@ def satz_text(satz: Decimal, fmt: str) -> str:
     return fmt.format(s=f"{satz.normalize():f}")
 
 
-def render(re: Rechnung, pfad: Path, v: Variante) -> None:
+def render(re: Rechnung, pfad: Path, v: Variante, versteckt: str | None = None) -> None:
+    """`versteckt`: Text in weißer 1-pt-Schrift (nur Angriff A2; sonst bleiben die Bytes gleich)."""
     if v.layout == "C":
         _render_c(re, pfad, v)
         return
@@ -244,6 +245,11 @@ def render(re: Rechnung, pfad: Path, v: Variante) -> None:
     c.drawString(links, 56, f"{re.lieferant_name} · {re.lieferant_strasse} · {re.lieferant_ort}")
     if fuss:
         c.drawString(links, 44, " · ".join(fuss))
+
+    if versteckt:
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont("Helvetica", 1)
+        c.drawString(links, 90, versteckt)
 
     c.showPage()
     c.save()
