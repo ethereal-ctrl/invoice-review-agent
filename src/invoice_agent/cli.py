@@ -318,3 +318,40 @@ def ui(
     dsn = dsn or "postgresql://ia_mensch:ia_mensch_dev@localhost:55432/invoice"
     app_ = erstelle_app(dsn, lade(config), daten.resolve(), runs.resolve())
     uvicorn.run(app_, host="127.0.0.1", port=port, log_level="warning")
+
+
+@app.command("sensitivitaet")
+def sensitivitaet(
+    split: Annotated[str, typer.Option("--split")] = "dev",
+    stufen: Annotated[
+        str, typer.Option(help="Kommagetrennt; je Stufe zählt der letzte Lauf")
+    ] = "b1,regeln,llm:nim_gross,agent:nim_gross",
+    config: ConfigOption = STANDARD_CONFIG,
+    daten: ZielOption = STANDARD_ZIEL,
+    runs: LaeufeOption = STANDARD_LAEUFE,
+) -> None:
+    """Kosten pro 100 unter halbierten und verdoppelten Pauschalen und anderen Fehlerquoten."""
+    from invoice_agent.eval.laeufe import lade_vorhersagen
+    from invoice_agent.eval.metriken import Vorhersage
+    from invoice_agent.eval.runner import auswahl
+    from invoice_agent.eval.sensitivitaet import analysiere
+    from invoice_agent.gold import lade_gold
+
+    laeufe: dict[str, list[Vorhersage]] = {}
+    for stufe in [s.strip() for s in stufen.split(",") if s.strip()]:
+        ordner = sorted(p for p in runs.glob(f"{stufe}_{split}_*") if p.is_dir())
+        if not ordner:
+            typer.echo(f"Kein Lauf für {stufe} auf {split}, übersprungen.", err=True)
+            continue
+        laeufe[stufe] = lade_vorhersagen(ordner[-1])
+        typer.echo(f"{stufe:<18} {ordner[-1].name}")
+    gold = auswahl(lade_gold(daten / "eval" / "gold.jsonl"), split)
+    szenarien = analysiere(gold, laeufe, lade(config).kosten)
+    basis = next(s for s in szenarien if s.name == "Pauschalen x1, Fehlerquote 5 %")
+    typer.echo("")
+    typer.echo(f"{'Szenario':<38}" + "".join(f"{s:>18}" for s in laeufe) + "  Reihenfolge")
+    for sz in szenarien:
+        gleich = "gleich" if sz.reihenfolge == basis.reihenfolge else "ANDERS"
+        werte = "".join(f"{sz.kosten[s]:>16} €" for s in laeufe)
+        typer.echo(f"{sz.name:<38}{werte}  {gleich}")
+    typer.echo(f"\nReihenfolge im Basisfall: {basis.rangfolge}")
