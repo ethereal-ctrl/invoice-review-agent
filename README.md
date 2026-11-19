@@ -17,9 +17,9 @@ Eingehende Rechnungen werden gegen Bestellung, Wareneingang und Stammdaten gepr�
 | Datengenerator mit Gold-Labels und PDF-Rendering | ✅ |
 | Eval-Harness (Kostenmatrix, gepaarter Bootstrap, Test-Split-Sperre) | ✅ |
 | Baselines B0/B1, Stufe 1 (Regex-Extraktion + Regeln) | ✅ |
-| Stufe 2 (LLM-Extraktion) | ⏳ |
-| Policy-Middleware, Audit-Log | ⏳ |
-| Stufe 3 (Agent mit Tools, LangGraph) | ⏳ |
+| Stufe 2 (LLM-Extraktion) | ✅ |
+| Policy-Middleware, Audit-Log (append-only, geschwärzt) | ✅ |
+| Stufe 3 (Agent mit Tools, LangGraph, `interrupt` für Freigaben über der Grenze) | ✅ |
 | Angriffsfälle | ⏳ |
 
 ## Eval-Ladder
@@ -32,7 +32,7 @@ Jede Stufe ändert genau eine Sache und wird mit gepaartem Bootstrap gegen die v
 | B1 | Immer eskalieren |
 | 1 | Regeln ohne LLM |
 | 2 | Regeln + LLM-Extraktion |
-| 3 | Agent mit Tools |
+| 3 | Agent mit Lese-Tools entscheidet statt des Regelwerks; dieselbe Policy |
 
 Hauptmetrik sind die **Kosten pro 100 Rechnungen** über eine Kostenmatrix in Euro. Eine Freigabe, die nicht hätte erfolgen dürfen, kostet den zu viel gezahlten Betrag oder bei Betrug den ganzen Rechnungsbetrag.
 
@@ -40,6 +40,7 @@ Hauptmetrik sind die **Kosten pro 100 Rechnungen** über eine Kostenmatrix in Eu
 
 ```bash
 uv run invoice eval --stufe regeln --split dev      # beliebig oft
+uv run invoice eval --stufe agent:nim_gross --split smoke  # Stufe 3 über NVIDIA NIM
 uv run invoice eval --stufe regeln --split test     # genau einmal pro Stufe
 uv run invoice compare runs/<lauf_a> runs/<lauf_b>  # gepaarter Bootstrap, 95-%-Intervall
 ```
@@ -89,3 +90,7 @@ Siehe [docs/adr](docs/adr/README.md).
 ## Grenzen
 
 Synthetische Daten, ein PDF-Layout, nur EUR, kein Skonto. Die Taxonomie orientiert sich an typischen Fehlern in der Kreditorenbuchhaltung und ist nicht an echten Rechnungen validiert. Details in [docs/spezifikation.md](docs/spezifikation.md), Abschnitt 8.
+
+- Die Regex-Extraktion von Stufe 1 kennt Layout A vollständig. Ihr Ergebnis auf Layout A ist darum eine Obergrenze und kein fairer Vergleich. Aussagekräftig ist Layout C im Test-Split.
+- Die Token-Kosten stehen auf 0 €, weil das genutzte NVIDIA-NIM-Kontingent kostenlos ist. Ein Betrieb mit bezahlter API würde die Kosten pro 100 Rechnungen für die LLM-Stufen erhöhen.
+- Text für das LLM wird nicht pseudonymisiert. Die Rechnungen sind synthetisch, und die Lieferanten sind Firmen. Geschwärzt wird im Audit-Log.

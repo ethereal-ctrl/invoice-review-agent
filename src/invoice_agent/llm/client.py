@@ -12,6 +12,7 @@ import os
 import threading
 import time
 from collections import deque
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -40,8 +41,19 @@ class LlmProfil(BaseModel):
     extra_body: dict[str, object] = {}  # z.B. {"think": false} für Ollama
 
 
+class _Funktion(BaseModel):
+    name: str
+    arguments: str = "{}"
+
+
+class _ToolCall(BaseModel):
+    id: str = ""
+    function: _Funktion
+
+
 class _Nachricht(BaseModel):
     content: str | None = None
+    tool_calls: list[_ToolCall] | None = None
 
 
 class _Wahl(BaseModel):
@@ -67,12 +79,20 @@ class CacheFehlschlag(LlmFehler):
 
 
 @dataclass(frozen=True)
+class ToolAufruf:
+    id: str
+    name: str
+    argumente: str  # JSON-Text, so wie das Modell ihn geliefert hat
+
+
+@dataclass(frozen=True)
 class Antwort:
     text: str
     tokens_ein: int
     tokens_aus: int
     aus_cache: bool
     latenz_ms: float
+    tool_aufrufe: tuple[ToolAufruf, ...] = ()
 
     def kosten_eur(self, p: LlmProfil) -> Decimal:
         return (
@@ -126,27 +146,40 @@ class ChatClient:
             transport=transport,
         )
 
-    def _anfrage(self, nachrichten: list[dict[str, str]]) -> dict[str, object]:
+    def _anfrage(
+        self, nachrichten: Sequence[Mapping[str, object]], tools: Sequence[object] | None
+    ) -> dict[str, object]:
         p = self.profil
-        return {
+        anfrage: dict[str, object] = {
             "model": p.modell,
-            "messages": nachrichten,
+            "messages": list(nachrichten),
             "temperature": p.temperatur,
             "max_tokens": p.max_tokens,
             **p.extra_body,
         }
+        if tools:  # ohne Tools bleibt die Anfrage (und damit der Cache-Schlüssel) wie bisher
+            anfrage["tools"] = list(tools)
+            anfrage["tool_choice"] = "auto"
+        return anfrage
 
     @staticmethod
     def _schluessel(anfrage: dict[str, object]) -> str:
         roh = json.dumps(anfrage, sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(roh.encode("utf-8")).hexdigest()
 
-    def chat(self, nachrichten: list[dict[str, str]]) -> Antwort:
-        anfrage = self._anfrage(nachrichten)
+    def chat(
+        self,
+        nachrichten: Sequence[Mapping[str, object]],
+        tools: Sequence[object] | None = None,
+    ) -> Antwort:
+        anfrage = self._anfrage(nachrichten, tools)
         pfad = self._cache / f"{self._schluessel(anfrage)}.json"
         if pfad.exists():
             daten = json.loads(pfad.read_text(encoding="utf-8"))
-            return Antwort(daten["text"], daten["tokens_ein"], daten["tokens_aus"], True, 0.0)
+            aufrufe = tuple(ToolAufruf(**t) for t in daten.get("tool_aufrufe", []))
+            return Antwort(
+                daten["text"], daten["tokens_ein"], daten["tokens_aus"], True, 0.0, aufrufe
+            )
         if self._modus == "replay":
             raise CacheFehlschlag(f"Kein Cache-Eintrag für {pfad.name} (Replay-Modus)")
 
@@ -155,15 +188,27 @@ class ChatClient:
         latenz = (time.perf_counter() - start) * 1000
         try:
             antwort = _ChatAntwort.model_validate(daten)
-            text = antwort.choices[0].message.content or ""
+            nachricht = antwort.choices[0].message
         except (ValidationError, IndexError) as e:
             raise LlmFehler(f"Unerwartete Antwort: {str(daten)[:200]}") from e
+        text = nachricht.content or ""
+        aufrufe = tuple(
+            ToolAufruf(t.id or f"call_{i}", t.function.name, t.function.arguments)
+            for i, t in enumerate(nachricht.tool_calls or [])
+        )
         ein, aus = antwort.usage.prompt_tokens, antwort.usage.completion_tokens
-        eintrag = {"text": text, "tokens_ein": ein, "tokens_aus": aus, "modell": self.profil.modell}
+        eintrag: dict[str, object] = {
+            "text": text,
+            "tokens_ein": ein,
+            "tokens_aus": aus,
+            "modell": self.profil.modell,
+        }
+        if aufrufe:
+            eintrag["tool_aufrufe"] = [vars(a) for a in aufrufe]
         tmp = pfad.with_suffix(".tmp")
         tmp.write_text(json.dumps(eintrag, ensure_ascii=False), encoding="utf-8")
         tmp.replace(pfad)  # atomar, damit abgebrochene Läufe keinen halben Eintrag hinterlassen
-        return Antwort(text, ein, aus, False, latenz)
+        return Antwort(text, ein, aus, False, latenz, aufrufe)
 
     def _mit_backoff(self, anfrage: dict[str, object]) -> dict[str, object]:
         letzter: str = ""

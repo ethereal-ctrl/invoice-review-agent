@@ -81,3 +81,33 @@ def test_audit_ist_auch_fuer_owner_append_only(owner: psycopg.Connection) -> Non
 def test_agent_kann_keine_tabellen_anlegen(agent: psycopg.Connection) -> None:
     with pytest.raises(errors.InsufficientPrivilege):
         agent.execute("CREATE TABLE app.fremd (x int)")
+
+
+def test_postgres_audit_schreibt_als_agent(owner: psycopg.Connection) -> None:
+    """Der Agent schreibt ins Audit-Log, obwohl er es nicht lesen darf (kein RETURNING)."""
+    from invoice_agent.audit import Ereignis, PostgresAudit
+
+    try:
+        audit = PostgresAudit(AGENT_DSN)
+    except psycopg.OperationalError as e:
+        pytest.skip(f"Postgres nicht erreichbar: {e}")
+    run_id = f"test-{os.getpid()}-{id(audit)}"
+    try:
+        audit.schreibe(
+            Ereignis(
+                run_id=run_id,
+                fall_id="FALL-1",
+                knoten="policy",
+                tool="freigeben",
+                args_geschwaerzt={"iban": "DE**…3000"},
+                policy_regel="vorbedingungen_erfuellt",
+                ergebnis="ERLAUBT",
+            )
+        )
+    finally:
+        audit.schliesse()
+    zeile = owner.execute(
+        "SELECT tool, args_geschwaerzt->>'iban', ergebnis FROM audit.ereignisse WHERE run_id = %s",
+        (run_id,),
+    ).fetchone()
+    assert zeile == ("freigeben", "DE**…3000", "ERLAUBT")

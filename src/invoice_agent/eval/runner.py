@@ -5,6 +5,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from invoice_agent.audit import Audit, JsonlAudit
 from invoice_agent.config import Settings
 from invoice_agent.eval import laeufe
 from invoice_agent.eval.metriken import Metriken, Vorhersage, berechne
@@ -16,24 +17,42 @@ from invoice_agent.stufen.basis import Stufe
 from invoice_agent.stufen.llm_extraktion import LlmExtraktion
 from invoice_agent.stufen.regeln import llm, regeln
 
-STUFEN = ("b0", "b1", "regeln", "llm:<profil>")
+STUFEN = ("b0", "b1", "regeln", "llm:<profil>", "agent:<profil>")
 SPLITS = ("dev", "test", "smoke")
 
 
-def baue_stufe(name: str, settings: Settings, welt: Welt, modus: Modus = "live") -> Stufe:
+def _client(settings: Settings, profil_name: str, modus: Modus) -> ChatClient:
+    profil = settings.llm.profile.get(profil_name)
+    if profil is None:
+        raise ValueError(f"Unbekanntes LLM-Profil {profil_name!r}")
+    return ChatClient(profil, settings.llm.cache_dir, modus)
+
+
+def baue_stufe(
+    name: str,
+    settings: Settings,
+    welt: Welt,
+    modus: Modus = "live",
+    audit: Audit | None = None,
+    run_id: str = "lokal",
+) -> Stufe:
+    """Die Baselines b0/b1 laufen bewusst ohne Policy: Sie zeigen, was ohne Kontrollen passiert."""
     if name == "b0":
         return ImmerFreigeben()
     if name == "b1":
         return ImmerEskalieren()
     if name == "regeln":
-        return regeln(settings, welt)
+        return regeln(settings, welt, audit, run_id)
     if name.startswith("llm:"):
-        profil_name = name.removeprefix("llm:")
-        profil = settings.llm.profile.get(profil_name)
-        if profil is None:
-            raise ValueError(f"Unbekanntes LLM-Profil {profil_name!r}")
-        client = ChatClient(profil, settings.llm.cache_dir, modus)
-        return llm(name, settings, welt, LlmExtraktion(client))
+        client = _client(settings, name.removeprefix("llm:"), modus)
+        return llm(name, settings, welt, LlmExtraktion(client), audit, run_id)
+    if name.startswith("agent:"):
+        from invoice_agent.erp import WeltErp
+        from invoice_agent.stufen.agent import Agentenstufe
+
+        client = _client(settings, name.removeprefix("agent:"), modus)
+        extraktion = LlmExtraktion(client)  # gleicher Cache wie Stufe 2
+        return Agentenstufe(name, settings, welt, client, extraktion, WeltErp(welt), audit, run_id)
     raise ValueError(f"Unbekannte Stufe {name!r}, bekannt: {', '.join(STUFEN)}")
 
 
@@ -58,7 +77,9 @@ def lauf(
         laeufe.pruefe_test_freigabe(wurzel, stufe_name)  # vor der Arbeit, nicht danach
     gold = auswahl(lade_gold(daten / "eval" / "gold.jsonl"), split)
     welt = Welt.model_validate_json((daten / "erp.json").read_text(encoding="utf-8"))
-    stufe = baue_stufe(stufe_name, settings, welt, modus)
+    lauf_id = laeufe.neue_lauf_id(stufe_name, split)
+    audit_tmp = wurzel / f".{lauf_id}.audit.jsonl"  # der Lauf-Ordner entsteht erst am Ende
+    stufe = baue_stufe(stufe_name, settings, welt, modus, JsonlAudit(audit_tmp), lauf_id)
 
     def eins(g: Gold) -> Vorhersage:
         return stufe.entscheide(g.fall_id, daten / "eingang" / f"{g.fall_id}.pdf")
@@ -77,9 +98,10 @@ def lauf(
         "generator_commit": manifest["git"]["commit"],
         "modus": modus,
     }
-    if stufe_name.startswith("llm:"):
-        meta["llm_profil"] = settings.llm.profile[stufe_name.removeprefix("llm:")].model_dump(
-            mode="json"
-        )
-    ordner = laeufe.speichere(wurzel, stufe_name, split, vorhersagen, metriken, meta)
+    if ":" in stufe_name:
+        profil = settings.llm.profile[stufe_name.split(":", 1)[1]]
+        meta["llm_profil"] = profil.model_dump(mode="json")
+    ordner = laeufe.speichere(wurzel, stufe_name, split, vorhersagen, metriken, meta, lauf_id)
+    if audit_tmp.exists():
+        audit_tmp.rename(ordner / "audit.jsonl")
     return ordner, metriken

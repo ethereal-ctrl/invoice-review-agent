@@ -8,6 +8,14 @@ toleranzen:
 policy:
   freigabegrenze_eur: "5000.00"  # R15: kumuliert pro Bestellung, brutto
   fenster_tage: 30               # R15: Zeitfenster für die Kumulierung
+  tools:                         # Allowlist mit Risikoklasse (Plan 3.4); fehlt ein Tool, gibt es es nicht
+    bestellung_lesen: LESEN
+    wareneingang_lesen: LESEN
+    lieferant_lesen: LESEN
+    rechnungshistorie_lesen: LESEN
+    zurueckhalten: STOPPEN       # Geld stoppen ist nie gesperrt
+    eskalieren: STOPPEN
+    freigeben: FREIGEBEN         # nur mit erfüllten Vorbedingungen und unter der Freigabegrenze
 
 kosten:                     # Pauschalen der Kostenmatrix in EUR (Begründung: ADR 0006)
   zurueckhalten_statt_freigeben: "15.00"   # Nacharbeit, verlorenes Skonto, Lieferantenbeziehung
@@ -41,9 +49,10 @@ llm:
     nim_gross:
       provider: nvidia
       basis_url: https://integrate.api.nvidia.com/v1
-      modell: google/gemma-4-31b-it    # bitte prüfen
+      modell: google/gemma-4-31b-it    # geprüft 19.11.2026 (Modellliste NIM)
       key_env: NVIDIA_API_KEY
       rpm: 35
+      timeout_s: 300                   # Agent-Aufrufe brauchen tagsüber bis ~2 min
     gemini_gross:
       provider: gemini
       basis_url: https://generativelanguage.googleapis.com/v1beta/openai

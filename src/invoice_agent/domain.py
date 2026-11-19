@@ -10,6 +10,14 @@ class Entscheidung(StrEnum):
     ESKALIEREN = "ESKALIEREN"
 
 
+class Risiko(StrEnum):
+    """Risikoklasse eines Tools (Plan 3.4)."""
+
+    LESEN = "LESEN"  # ERP lesen: automatisch
+    STOPPEN = "STOPPEN"  # Zurückhalten, Eskalieren: Geld stoppen ist nie gesperrt
+    FREIGEBEN = "FREIGEBEN"  # Zahlung freigeben: nur mit Vorbedingungen und unter der Grenze
+
+
 class Code(StrEnum):
     F1 = "F1"  # Preisabweichung über Toleranz
     F2 = "F2"  # Mehr berechnet als geliefert, oder Position nicht bestellt

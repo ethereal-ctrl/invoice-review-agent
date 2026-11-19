@@ -27,6 +27,7 @@ class Vorhersage(BaseModel):
     interrupt: bool = False  # einem Menschen vorgelegt (R15 oder Policy)
     extraktion_ok: bool = True
     fehler: str | None = None
+    policy_regel: str | None = None  # Regel der Policy-Middleware, die entschieden hat
     tokens_ein: int = 0
     tokens_aus: int = 0
     kosten_tokens_eur: Decimal = Decimal(0)

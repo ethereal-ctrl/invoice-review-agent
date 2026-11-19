@@ -44,3 +44,32 @@ def test_laden_und_als_agent_lesen(tmp_path: Path) -> None:
         ).fetchall()
         namen = {s[0] for s in spalten}
         assert not namen & {"typ", "gold", "codes", "abweichung_eur"}
+
+
+def test_postgres_erp_liefert_dasselbe_wie_welt_erp(tmp_path: Path) -> None:
+    """Die Tools des Agenten sehen in Postgres (Rolle ia_agent) exakt dieselben Daten."""
+    from invoice_agent.erp import PostgresErp, WeltErp
+
+    ergebnis = erzeuge(lade(CONFIG))
+    try:
+        owner = psycopg.connect(OWNER_DSN, connect_timeout=2)
+    except psycopg.OperationalError as e:
+        pytest.skip(f"Postgres nicht erreichbar: {e}")
+    with owner:
+        db.lade(owner, ergebnis.welt, [f.fall_id for f in ergebnis.faelle], tmp_path)
+    welt, pg = WeltErp(ergebnis.welt), PostgresErp(AGENT_DSN)
+    try:
+        for b in ergebnis.welt.bestellungen:
+            assert pg.bestellung(b.best_nr) == welt.bestellung(b.best_nr)
+            assert pg.wareneingang(b.best_nr) == welt.wareneingang(b.best_nr)
+        for lf in ergebnis.welt.lieferanten:
+            assert pg.lieferant(kred_nr=lf.kred_nr) == welt.lieferant(kred_nr=lf.kred_nr)
+            ust = " ".join(lf.ust_id.lower())  # Leerzeichen und Kleinschreibung egal (R2)
+            assert pg.lieferant(ust_id=ust) == welt.lieferant(ust_id=ust)
+            assert pg.rechnungshistorie(lf.kred_nr) == welt.rechnungshistorie(lf.kred_nr)
+        # A9: SQL im Feld der Bestellnummer ist nur ein Suchwert.
+        assert pg.bestellung("B1'; DROP TABLE erp.best_kopf; --") is None
+        assert pg.lieferant(kred_nr="' OR '1'='1") is None
+        assert pg.bestellung(ergebnis.welt.bestellungen[0].best_nr) is not None
+    finally:
+        pg.schliesse()

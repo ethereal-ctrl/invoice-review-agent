@@ -32,6 +32,10 @@ def pruefe_test_freigabe(wurzel: Path, stufe: str) -> None:
         )
 
 
+def neue_lauf_id(stufe: str, split: str) -> str:
+    return f"{stufe}_{split}_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
+
+
 def speichere(
     wurzel: Path,
     stufe: str,
@@ -39,11 +43,12 @@ def speichere(
     vorhersagen: list[Vorhersage],
     metriken: Metriken,
     meta: dict[str, object],
+    lauf_id: str | None = None,
 ) -> Path:
     if split == "test":
         pruefe_test_freigabe(wurzel, stufe)
-    zeit = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    lauf_id = f"{stufe}_{split}_{zeit}"
+    lauf_id = lauf_id or neue_lauf_id(stufe, split)
+    zeit = lauf_id.rsplit("_", 1)[-1]
     ordner = wurzel / lauf_id
     ordner.mkdir(parents=True, exist_ok=False)
     with (ordner / "vorhersagen.jsonl").open("w", encoding="utf-8") as f:

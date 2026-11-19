@@ -7,6 +7,7 @@ from typing import Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from invoice_agent.domain import Risiko
 from invoice_agent.llm.client import LlmProfil
 
 
@@ -20,9 +21,22 @@ class Toleranzen(_Basis):
     duplikat_tage: int = Field(gt=0)
 
 
+STANDARD_TOOLS: dict[str, Risiko] = {
+    "bestellung_lesen": Risiko.LESEN,
+    "wareneingang_lesen": Risiko.LESEN,
+    "lieferant_lesen": Risiko.LESEN,
+    "rechnungshistorie_lesen": Risiko.LESEN,
+    "zurueckhalten": Risiko.STOPPEN,
+    "eskalieren": Risiko.STOPPEN,
+    "freigeben": Risiko.FREIGEBEN,
+}
+
+
 class PolicyConfig(_Basis):
     freigabegrenze_eur: Decimal = Field(gt=0)
     fenster_tage: int = Field(gt=0)
+    # Allowlist: Ein Tool, das hier fehlt, existiert für den Agenten nicht.
+    tools: dict[str, Risiko] = Field(default_factory=lambda: dict(STANDARD_TOOLS))
 
 
 class GeneratorConfig(_Basis):
