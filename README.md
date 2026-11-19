@@ -21,6 +21,7 @@ Eingehende Rechnungen werden gegen Bestellung, Wareneingang und Stammdaten gepr�
 | Policy-Middleware, Audit-Log (append-only, geschwärzt) | ✅ |
 | Stufe 3 (Agent mit Tools, LangGraph, `interrupt` für Freigaben über der Grenze) | ✅ |
 | Angriffsset A1–A12 mit Gate in der CI | ✅ |
+| Postgres-Queue (SKIP LOCKED) und Worker als Rolle `ia_agent` | ✅ |
 
 ## Eval-Ladder
 
@@ -81,6 +82,16 @@ configs/             YAML-Konfiguration (Toleranzen, Policy, Generator)
 db/init/             Schema und Rollen (erp, app, audit)
 docs/                Spezifikation und ADRs
 tests/               pytest
+```
+
+## Betrieb: Queue und Worker
+
+Neben den Eval-Läufen gibt es den Betriebspfad: Fälle liegen in `app.faelle`, Worker holen sie mit `FOR UPDATE SKIP LOCKED`, speichern die Entscheidung und den Statuswechsel in einer Transaktion und schreiben jeden Policy-Antrag ins append-only Audit-Log ([ADR 0004](docs/adr/0004-postgres-queue-statt-kafka.md)).
+
+```bash
+uv run invoice load
+uv run invoice worker --stufe regeln --threads 4          # 300 Fälle in ~5 s
+uv run invoice worker --stufe agent:nim_gross --maximal 10
 ```
 
 ## Angriffe

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from invoice_agent.audit import Audit, JsonlAudit
 from invoice_agent.config import Settings
+from invoice_agent.erp import Erp
 from invoice_agent.eval import laeufe
 from invoice_agent.eval.metriken import Metriken, Vorhersage, berechne
 from invoice_agent.gold import Gold, lade_gold
@@ -35,6 +36,7 @@ def baue_stufe(
     modus: Modus = "live",
     audit: Audit | None = None,
     run_id: str = "lokal",
+    erp: Erp | None = None,
 ) -> Stufe:
     """Die Baselines b0/b1 laufen bewusst ohne Policy: Sie zeigen, was ohne Kontrollen passiert."""
     if name == "b0":
@@ -52,7 +54,8 @@ def baue_stufe(
 
         client = _client(settings, name.removeprefix("agent:"), modus)
         extraktion = LlmExtraktion(client)  # gleicher Cache wie Stufe 2
-        return Agentenstufe(name, settings, welt, client, extraktion, WeltErp(welt), audit, run_id)
+        quelle = erp if erp is not None else WeltErp(welt)
+        return Agentenstufe(name, settings, welt, client, extraktion, quelle, audit, run_id)
     raise ValueError(f"Unbekannte Stufe {name!r}, bekannt: {', '.join(STUFEN)}")
 
 

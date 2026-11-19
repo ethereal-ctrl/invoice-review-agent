@@ -7,7 +7,7 @@ Jede Entscheidung, die man im Nachhinein begründen muss, bekommt ein ADR. Vorla
 | [0001](0001-spezifikation-als-einzige-quelle.md) | Fachliche Spezifikation als einzige Quelle der Wahrheit | angenommen |
 | 0002 | Use Case Rechnungsprüfung mit 3-Way-Match | geplant |
 | [0003](0003-langgraph-fuer-den-agenten.md) | LangGraph für den Agenten | angenommen |
-| 0004 | Postgres-Queue statt Kafka | geplant |
+| [0004](0004-postgres-queue-statt-kafka.md) | Postgres-Queue statt Kafka | angenommen |
 | [0005](0005-policy-in-der-middleware.md) | Policy in der Middleware statt im Prompt | angenommen |
 | 0006 | Kostenmatrix in Euro und Umrechnung auf 5 % Fehlerquote | geplant |
 | 0007 | CI im Replay-Modus | geplant |

@@ -221,3 +221,47 @@ def angriffe_lauf(
     typer.echo(f"Automatische Freigaben: {durch} von {len(befunde)}")
     if durch:
         raise typer.Exit(1)
+
+
+AgentDsn = Annotated[str | None, typer.Option("--dsn", envvar="IA_AGENT_DSN")]
+STANDARD_AGENT_DSN = "postgresql://ia_agent:ia_agent_dev@localhost:55432/invoice"
+
+
+@app.command("worker")
+def worker(
+    stufe: Annotated[str, typer.Option("--stufe", "-s", help="regeln, llm:<p>, agent:<p>")],
+    threads: Annotated[int, typer.Option(min=1)] = 4,
+    maximal: Annotated[int | None, typer.Option(help="Höchstens so viele Fälle")] = None,
+    haengend_min: Annotated[int, typer.Option(help="In Arbeit länger als N Minuten = neu")] = 30,
+    config: ConfigOption = STANDARD_CONFIG,
+    dsn: AgentDsn = None,
+) -> None:
+    """Fälle aus der Postgres-Queue abarbeiten (als Rolle ia_agent, Audit in Postgres)."""
+    from datetime import UTC, datetime
+
+    from invoice_agent import queue
+    from invoice_agent.audit import PostgresAudit
+    from invoice_agent.erp import PostgresErp
+    from invoice_agent.eval.metriken import Vorhersage
+    from invoice_agent.eval.runner import baue_stufe
+
+    dsn = dsn or STANDARD_AGENT_DSN
+    settings = lade(config)
+    run_id = f"worker_{stufe}_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
+    with psycopg.connect(dsn) as conn:
+        frei = queue.gib_haengende_frei(conn, haengend_min)
+        welt = queue.lies_welt(conn)
+    if frei:
+        typer.echo(f"{frei} hängende Fälle wieder geöffnet.")
+    audit, erp = PostgresAudit(dsn), PostgresErp(dsn)
+    try:
+        st = baue_stufe(stufe, settings, welt, "live", audit, run_id, erp)
+
+        def melde(v: Vorhersage) -> None:
+            typer.echo(f"  {v.fall_id}  {v.effektiv.value:<14} {v.policy_regel or ''}")
+
+        bilanz = queue.arbeite(dsn, st, run_id, threads, maximal, melde)
+    finally:
+        audit.schliesse()
+        erp.schliesse()
+    typer.echo(f"Lauf {run_id}: {len(bilanz.erledigt)} erledigt, {len(bilanz.fehler)} Fehler")
