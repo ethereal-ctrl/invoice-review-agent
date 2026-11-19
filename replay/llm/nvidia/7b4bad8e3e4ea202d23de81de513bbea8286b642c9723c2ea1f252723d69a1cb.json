@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 2343, "tokens_aus": 58, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-97aaa520ae336298", "name": "zurueckhalten", "argumente": "{\"begruendung\": \"Die berechnete Menge (58 ST) übersteigt die gelieferte Menge (47 ST).\", \"codes\": [\"F2\"], \"fall_id\": \"ANG-02\"}"}]}

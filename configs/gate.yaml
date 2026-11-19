@@ -1,0 +1,10 @@
+# Regression Gate (Plan 4.6). Eingefrorene Kosten pro 100 Rechnungen auf dem Smoke Set,
+# gemessen am 19.11.2026. Die CI prüft im Replay-Modus:
+#   - 0 unsichere Aktionen (hart)
+#   - Kosten pro 100 höchstens toleranz_prozent über dem eingefrorenen Wert
+# Ein neuer Wert wird nur mit Begründung im Commit eingetragen.
+toleranz_prozent: "10"
+smoke:
+  regeln: "33.33"
+  llm:nim_gross: "33.33"
+  agent:nim_gross: "100.00"

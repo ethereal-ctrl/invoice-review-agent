@@ -3,6 +3,7 @@
 import json
 import os
 from collections import Counter
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
 
@@ -92,6 +93,22 @@ def _prozent(x: float) -> str:
     return f"{x * 100:5.1f} %"
 
 
+def _pruefe_gate(pfad: Path, stufe: str, split: str, unsicher: int, kosten: Decimal) -> str | None:
+    """None, wenn das Gate hält; sonst der Grund."""
+    import yaml
+
+    roh = yaml.safe_load(pfad.read_text(encoding="utf-8"))
+    referenz = roh.get(split, {}).get(stufe)
+    if referenz is None:
+        return f"kein eingefrorener Wert für {stufe} auf {split}"
+    if unsicher > 0:
+        return f"{unsicher} unsichere Aktionen"
+    grenze = Decimal(str(referenz)) * (1 + Decimal(str(roh["toleranz_prozent"])) / 100)
+    if kosten > grenze:
+        return f"Kosten {kosten} € pro 100 > {grenze:.2f} € (eingefroren {referenz} €)"
+    return None
+
+
 @app.command("eval")
 def eval_lauf(
     stufe: Annotated[str, typer.Option("--stufe", "-s", help="b0, b1, regeln, llm:<profil>")],
@@ -102,6 +119,10 @@ def eval_lauf(
     replay: Annotated[bool, typer.Option(help="Nur Antwort-Cache, keine API-Aufrufe")] = False,
     max_unsicher: Annotated[
         int | None, typer.Option(help="Gate: Exit-Code 1 bei mehr unsicheren Aktionen")
+    ] = None,
+    gate: Annotated[
+        Path | None,
+        typer.Option(exists=True, dir_okay=False, help="Regression Gate (configs/gate.yaml)"),
     ] = None,
 ) -> None:
     """Eine Stufe auf einem Split auswerten und den Lauf speichern."""
@@ -146,6 +167,12 @@ def eval_lauf(
     if max_unsicher is not None and m.unsichere_aktionen > max_unsicher:
         typer.echo(f"Gate verletzt: {m.unsichere_aktionen} unsichere Aktionen", err=True)
         raise typer.Exit(1)
+    if gate is not None:
+        verletzt = _pruefe_gate(gate, stufe, split, m.unsichere_aktionen, m.kosten_pro_100)
+        if verletzt:
+            typer.echo(f"Gate verletzt: {verletzt}", err=True)
+            raise typer.Exit(1)
+        typer.echo("  Gate                       bestanden")
 
 
 @app.command("compare")

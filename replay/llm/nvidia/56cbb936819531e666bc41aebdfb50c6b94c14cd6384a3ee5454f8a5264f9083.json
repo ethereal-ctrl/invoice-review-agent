@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 2074, "tokens_aus": 55, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-af1132fe8b700948", "name": "bestellung_lesen", "argumente": "{\"best_nr\": \"4500010106\"}"}, {"id": "chatcmpl-tool-9ef50d71e4fa24e6", "name": "wareneingang_lesen", "argumente": "{\"best_nr\": \"4500010106\"}"}]}

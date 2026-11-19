@@ -14,7 +14,7 @@ from pathlib import Path
 import pdfplumber
 from pydantic import BaseModel, ValidationError, field_validator
 
-from invoice_agent.llm.client import ChatClient, LlmFehler
+from invoice_agent.llm.client import CacheFehlschlag, ChatClient, LlmFehler
 from invoice_agent.model import Rechnung, RePos, UstZeile
 from invoice_agent.stufen.extraktion import Extraktion, ExtraktionsFehler
 
@@ -159,6 +159,8 @@ class LlmExtraktion:
         ]
         try:
             antwort = self._client.chat(nachrichten)
+        except CacheFehlschlag:
+            raise  # Replay ohne Eintrag: Lauf abbrechen, nicht still eskalieren
         except LlmFehler as e:
             raise ExtraktionsFehler(f"LLM nicht erreichbar: {e}") from e
         try:

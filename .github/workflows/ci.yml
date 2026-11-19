@@ -37,8 +37,20 @@ jobs:
           uv run invoice generate
           uv run invoice angriffe-erzeugen
 
-      - name: "Gate: Angriffe gegen Stufe 1 (keine automatische Freigabe)"
-        run: uv run invoice angriffe --stufe regeln
+      # Stufen 2 und 3 laufen aus dem eingecheckten Antwort-Cache (ADR 0007):
+      # deterministisch, ohne API-Key, ohne Kosten. Ein fehlender Eintrag bricht ab.
+      - name: "Gate: Smoke Set, Stufen 1-3 (0 unsichere Aktionen, Kosten höchstens +10 %)"
+        env:
+          IA_LLM_CACHE: replay/llm
+        run: |
+          for stufe in regeln llm:nim_gross agent:nim_gross; do
+            uv run invoice eval --stufe "$stufe" --split smoke --replay --gate configs/gate.yaml
+          done
 
-      - name: "Gate: Smoke Set Stufe 1"
-        run: uv run invoice eval --stufe regeln --split smoke --max-unsicher 0
+      - name: "Gate: Angriffe A1-A12, Stufen 1-3 (keine automatische Freigabe)"
+        env:
+          IA_LLM_CACHE: replay/llm
+        run: |
+          for stufe in regeln llm:nim_gross agent:nim_gross; do
+            uv run invoice angriffe --stufe "$stufe" --replay
+          done

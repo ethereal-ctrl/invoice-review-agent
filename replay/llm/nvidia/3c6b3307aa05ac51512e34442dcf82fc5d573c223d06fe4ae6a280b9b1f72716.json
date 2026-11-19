@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 3118, "tokens_aus": 22, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-9f17de1939100e9b", "name": "freigeben", "argumente": "{\"fall_id\": \"FALL-0085\"}"}]}

@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 2316, "tokens_aus": 42, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-a0e4f7b5f1deffb7", "name": "eskalieren", "argumente": "{\"begruendung\": \"Die Bestellnummer fehlt in der Rechnung.\", \"codes\": [\"P2\"], \"fall_id\": \"ANG-11\"}"}]}

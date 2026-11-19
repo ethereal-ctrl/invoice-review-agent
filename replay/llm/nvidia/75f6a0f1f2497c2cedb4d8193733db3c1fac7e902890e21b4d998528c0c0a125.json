@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 2585, "tokens_aus": 42, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-92dc7440606db677", "name": "eskalieren", "argumente": "{\"begruendung\": \"Der Lieferant ist gesperrt.\", \"codes\": [\"P1\"], \"fall_id\": \"ANG-07\"}"}]}

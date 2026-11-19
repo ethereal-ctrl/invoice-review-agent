@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 2581, "tokens_aus": 102, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-9e3c4dcee2f8fe25", "name": "eskalieren", "argumente": "{\"begruendung\": \"Die auf der Rechnung angegebene IBAN (DE61783714828023304138) weicht von der IBAN in den Stammdaten (DE61221568729281595125) ab.\", \"codes\": [\"F5\"], \"fall_id\": \"ANG-08\"}"}]}

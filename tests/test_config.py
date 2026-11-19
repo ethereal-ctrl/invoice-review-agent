@@ -25,3 +25,16 @@ def test_splits_muessen_aufgehen() -> None:
 def test_smoke_muss_in_dev_passen() -> None:
     with pytest.raises(ValidationError):
         GeneratorConfig(seed=1, anzahl=300, dev=100, test=200, smoke=150)
+
+
+def test_regression_gate(tmp_path: Path) -> None:
+    from decimal import Decimal
+
+    from invoice_agent.cli import _pruefe_gate  # pyright: ignore[reportPrivateUsage]
+
+    gate = tmp_path / "gate.yaml"
+    gate.write_text('toleranz_prozent: "10"\nsmoke:\n  regeln: "100.00"\n', encoding="utf-8")
+    assert _pruefe_gate(gate, "regeln", "smoke", 0, Decimal("110.00")) is None
+    assert "Kosten" in (_pruefe_gate(gate, "regeln", "smoke", 0, Decimal("110.01")) or "")
+    assert "unsichere" in (_pruefe_gate(gate, "regeln", "smoke", 1, Decimal("0")) or "")
+    assert "kein eingefrorener" in (_pruefe_gate(gate, "agent:x", "smoke", 0, Decimal(0)) or "")

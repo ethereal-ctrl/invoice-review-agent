@@ -127,11 +127,17 @@ class ChatClient:
         cache_dir: Path,
         modus: Modus = "live",
         transport: httpx.BaseTransport | None = None,
+        kopie: Path | None = None,
     ) -> None:
+        """`kopie`: jeden benutzten Cache-Eintrag zusätzlich dorthin kopieren (Export eines
+        kleinen Replay-Caches für die CI)."""
         self.profil = profil
         self._modus = modus
         self._cache = cache_dir / profil.provider
         self._cache.mkdir(parents=True, exist_ok=True)
+        self._kopie = kopie / profil.provider if kopie is not None else None
+        if self._kopie is not None:
+            self._kopie.mkdir(parents=True, exist_ok=True)
         self._limiter = _RateLimiter(profil.rpm)
         headers = {"Content-Type": "application/json"}
         if modus == "live" and profil.key_env:
@@ -175,6 +181,7 @@ class ChatClient:
         anfrage = self._anfrage(nachrichten, tools)
         pfad = self._cache / f"{self._schluessel(anfrage)}.json"
         if pfad.exists():
+            self._kopiere(pfad)
             daten = json.loads(pfad.read_text(encoding="utf-8"))
             aufrufe = tuple(ToolAufruf(**t) for t in daten.get("tool_aufrufe", []))
             return Antwort(
@@ -208,7 +215,12 @@ class ChatClient:
         tmp = pfad.with_suffix(".tmp")
         tmp.write_text(json.dumps(eintrag, ensure_ascii=False), encoding="utf-8")
         tmp.replace(pfad)  # atomar, damit abgebrochene Läufe keinen halben Eintrag hinterlassen
+        self._kopiere(pfad)
         return Antwort(text, ein, aus, False, latenz, aufrufe)
+
+    def _kopiere(self, pfad: Path) -> None:
+        if self._kopie is not None:
+            (self._kopie / pfad.name).write_bytes(pfad.read_bytes())
 
     def _mit_backoff(self, anfrage: dict[str, object]) -> dict[str, object]:
         letzter: str = ""

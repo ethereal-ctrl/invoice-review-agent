@@ -32,7 +32,7 @@ from invoice_agent.config import Settings
 from invoice_agent.domain import Code, Entscheidung
 from invoice_agent.erp import Erp
 from invoice_agent.eval.metriken import Vorhersage
-from invoice_agent.llm.client import ChatClient, LlmFehler
+from invoice_agent.llm.client import CacheFehlschlag, ChatClient, LlmFehler
 from invoice_agent.model import Rechnung, Welt
 from invoice_agent.policy import Antrag, Bescheid, Policy, Urteil
 from invoice_agent.pruefung import Index
@@ -267,6 +267,8 @@ class Agentenstufe:
             return self._stoppen(z["fall_id"], "schrittlimit")
         try:
             a = self._client.chat(z["nachrichten"], TOOLS)
+        except CacheFehlschlag:
+            raise  # Replay ohne Eintrag: Lauf abbrechen, nicht still eskalieren
         except LlmFehler as e:
             return {**self._stoppen(z["fall_id"], "llm_fehler"), "fehler": str(e)}
         self._audit.schreibe(

@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 2544, "tokens_aus": 27, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-826055c721eebeb3", "name": "rechnungshistorie_lesen", "argumente": "{\"kred_nr\": \"K10029\"}"}]}

@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 2206, "tokens_aus": 27, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-9ca7ad592f376474", "name": "lieferant_lesen", "argumente": "{\"ust_id\": \"DE168318464\"}"}]}

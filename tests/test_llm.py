@@ -130,3 +130,29 @@ def test_llm_stufe_eskaliert_bei_unsinn(tmp_path: Path) -> None:
     v = stufe.entscheide(fall.fall_id, pdf)
     assert not v.extraktion_ok
     assert v.effektiv is Entscheidung.ESKALIEREN
+
+
+def test_kopie_exportiert_benutzte_eintraege(tmp_path: Path) -> None:
+    cache, export = tmp_path / "cache", tmp_path / "export"
+    ChatClient(PROFIL, cache, transport=httpx.MockTransport(_Fake([_antwort("a")]))).chat(NACHRICHT)
+    ChatClient(PROFIL, cache, transport=httpx.MockTransport(_Fake([_antwort("b")]))).chat(
+        [{"role": "user", "content": "anders"}]
+    )
+    replay = ChatClient(PROFIL, cache, "replay", kopie=export)
+    assert replay.chat(NACHRICHT).text == "a"
+    assert len(list((export / "fake").iterdir())) == 1  # nur der benutzte Eintrag
+    assert ChatClient(PROFIL, export, "replay").chat(NACHRICHT).text == "a"
+
+
+def test_cache_fehlschlag_bricht_ab_statt_zu_eskalieren(tmp_path: Path) -> None:
+    """Im Replay (CI) darf ein fehlender Eintrag nicht als Eskalation durchrutschen."""
+    settings = lade(CONFIG)
+    ergebnis = erzeuge(settings)
+    fall = ergebnis.faelle[0]
+    pdf = tmp_path / "re.pdf"
+    render(fall.rechnung, pdf, waehle_variante(random.Random(0)))
+    stufe = llm(
+        "llm:fake", settings, ergebnis.welt, LlmExtraktion(_client(tmp_path, _Fake([]), "replay"))
+    )
+    with pytest.raises(CacheFehlschlag):
+        stufe.entscheide(fall.fall_id, pdf)

@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 2626, "tokens_aus": 49, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-931ab8937a7ab998", "name": "eskalieren", "argumente": "{\"begruendung\": \"Die USt-ID fehlt auf der Rechnung (F6).\", \"codes\": [\"F6\"], \"fall_id\": \"FALL-0061\"}"}]}

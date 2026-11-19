@@ -1,0 +1,1 @@
+{"text": "", "tokens_ein": 3123, "tokens_aus": 68, "modell": "google/gemma-4-31b-it", "tool_aufrufe": [{"id": "chatcmpl-tool-af8584bea29709a1", "name": "zurueckhalten", "argumente": "{\"begruendung\": \"Position 2 (M-20065): Berechnete Menge (2 ST) ist größer als gelieferte Menge (1 ST).\", \"codes\": [\"F2\"], \"fall_id\": \"FALL-0010\"}"}]}

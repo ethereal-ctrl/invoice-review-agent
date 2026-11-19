@@ -1,6 +1,7 @@
 """Eine Stufe auf einem Split laufen lassen und das Ergebnis speichern."""
 
 import json
+import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -27,7 +28,11 @@ def _client(settings: Settings, profil_name: str, modus: Modus) -> ChatClient:
     profil = settings.llm.profile.get(profil_name)
     if profil is None:
         raise ValueError(f"Unbekanntes LLM-Profil {profil_name!r}")
-    return ChatClient(profil, settings.llm.cache_dir, modus)
+    # IA_LLM_CACHE: anderer Cache-Ordner (CI: eingecheckter Replay-Cache).
+    # IA_LLM_CACHE_EXPORT: benutzte Einträge zusätzlich dorthin kopieren.
+    cache = Path(os.environ.get("IA_LLM_CACHE", str(settings.llm.cache_dir)))
+    export = os.environ.get("IA_LLM_CACHE_EXPORT")
+    return ChatClient(profil, cache, modus, kopie=Path(export) if export else None)
 
 
 def baue_stufe(
