@@ -124,9 +124,15 @@ class _Schema(BaseModel):
         )
 
 
+def ohne_denken(text: str) -> str:
+    """Denkblöcke entfernen: `<think>` (Ollama, Qwen) und `<thought>` (Gemma über die
+    Gemini-API, dort nicht abschaltbar). Antworten ohne solche Blöcke bleiben unverändert."""
+    return re.sub(r"<(think|thought)>.*?</\1>", "", text, flags=re.DOTALL).strip()
+
+
 def json_aus_antwort(text: str) -> dict[str, object]:
     """JSON-Objekt aus einer Modellantwort holen (Denkblöcke und Markdown entfernen)."""
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = ohne_denken(text)
     start, ende = text.find("{"), text.rfind("}")
     if start < 0 or ende <= start:
         raise ExtraktionsFehler("Keine JSON-Antwort")

@@ -1,6 +1,6 @@
 # 0008: Provider NVIDIA NIM, Gemini als Fallback, nie gemischt
 
-- **Status:** angenommen (Fallback bisher ungetestet)
+- **Status:** angenommen (Fallback am 20.11.2026 auf dem Smoke Set geprüft)
 - **Datum:** 2026-11-19
 
 ## Kontext
@@ -23,4 +23,8 @@ Das Budget ist 0 €. Gebraucht wird ein großes Modell mit Tool Calling für St
 
 - Die Token-Kosten stehen auf 0 €. Das ist im README unter „Grenzen“ genannt.
 - Tagsüber dauern einzelne Aufrufe bis zu 2 Minuten (p50 im ersten Smoke-Lauf von Stufe 3: 174 s pro Rechnung). Das Timeout steht auf 300 s, und abgebrochene Fälle werden fail-safe eskaliert und beim Wiederholen aus dem Cache ergänzt.
-- Der Gemini-Fallback ist ohne API-Key nicht getestet, und die Modell-ID dort ist nicht geprüft. Vor dem Test-Lauf nachholen oder als Grenze nennen.
+- **Gemini-Fallback, geprüft am 20.11.2026** auf dem Smoke Set (Modell `models/gemma-4-31b-it`):
+  - Über die Gemini-API liefert Gemma immer einen Denkblock (`<thought>`), der sich bei diesem Modell nicht abschalten lässt. Er wird vor dem Parsen entfernt und nicht an den Agenten zurückgegeben. Die Denk-Tokens zählen gegen `max_tokens`. Mit 2.048 brach das JSON ab, deshalb steht das Limit im Profil auf 8.192.
+  - **Stufe 2:** Alle 20 beantworteten Fälle wurden genau wie bei NIM entschieden, mit denselben Codes. 10 Fälle scheiterten an Überlastung (HTTP 503, auch nach Backoff) und wurden fail-safe eskaliert.
+  - **Stufe 3:** 15 von 30 Fällen scheiterten an Überlastung. Bei den übrigen 15 weicht der Agent in 3 Entscheidungen von NIM ab (2 davon richtiger, 1 falscher), trotz Temperatur 0. Unsichere Aktionen gab es keine. In einem Fall verweigerte die Policy eine Freigabe, weil die USt-ID anders gelesen wurde (`vorbedingung:F6`).
+  - Folgerung: Der Fallback funktioniert, aber das Verhalten des Agenten ist zwischen Anbietern nicht identisch, auch nicht bei gleichem Modell. Das bestätigt die Regel, Anbieter innerhalb eines Laufs nie zu mischen. Zur Zeit der Prüfung war Gemini für dieses Modell stark überlastet.

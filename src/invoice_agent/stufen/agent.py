@@ -37,7 +37,7 @@ from invoice_agent.model import Rechnung, Welt
 from invoice_agent.policy import Antrag, Bescheid, Policy, Urteil
 from invoice_agent.pruefung import Index
 from invoice_agent.stufen.extraktion import Extraktion, ExtraktionsFehler
-from invoice_agent.stufen.llm_extraktion import pdf_text
+from invoice_agent.stufen.llm_extraktion import ohne_denken, pdf_text
 
 MAX_SCHRITTE = 8  # LLM-Aufrufe pro Rechnung, danach wird eskaliert
 
@@ -284,7 +284,10 @@ class Agentenstufe:
                 tokens_aus=a.tokens_aus,
             )
         )
-        nachricht: dict[str, Any] = {"role": "assistant", "content": a.text}
+        # Denkblöcke nicht zurückschicken; Antworten ohne Denkblock bleiben bytegleich
+        # (sonst ändern sich die Cache-Schlüssel der Folgeanfragen).
+        text = ohne_denken(a.text) if "<thought>" in a.text or "<think>" in a.text else a.text
+        nachricht: dict[str, Any] = {"role": "assistant", "content": text}
         neu = [nachricht]
         if a.tool_aufrufe:
             nachricht["tool_calls"] = [

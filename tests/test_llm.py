@@ -156,3 +156,8 @@ def test_cache_fehlschlag_bricht_ab_statt_zu_eskalieren(tmp_path: Path) -> None:
     )
     with pytest.raises(CacheFehlschlag):
         stufe.entscheide(fall.fall_id, pdf)
+
+
+def test_json_aus_antwort_entfernt_gemma_denkblock() -> None:
+    text = '<thought>*   Input: {"falsch": true}</thought>{"a": 1}'
+    assert json_aus_antwort(text) == {"a": 1}

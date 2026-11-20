@@ -192,7 +192,7 @@ Synthetische Daten, zwei PDF-Layouts (A für die Entwicklung, C nur im Test-Spli
 - Die Regex-Extraktion von Stufe 1 kennt Layout A vollständig. Ihr Ergebnis auf Layout A ist darum eine Obergrenze und kein fairer Vergleich. Aussagekräftig ist Layout C im Test-Split.
 - Die Gold-Labels werden vom selben Regelwerk berechnet, das Stufe 1 und 2 verwenden. Das ist so gewollt, die Spezifikation ist die einzige Quelle ([ADR 0001](docs/adr/0001-spezifikation-als-einzige-quelle.md)). Deshalb misst der Vergleich vor allem die Extraktion. Mit echten Rechnungen und von Menschen vergebenen Labels würde dieselbe Eval-Ladder unverändert laufen.
 - Die Kostenpauschalen (15 €, 10 €, 5 €) sind Annahmen ([ADR 0006](docs/adr/0006-kostenmatrix-in-euro.md)). Die Sensitivitätsanalyse zeigt, dass die Reihenfolge der Stufen nicht von ihnen abhängt.
-- Ein Modell (Gemma 4 31B), ein Anbieter. Der Gemini-Fallback ist konfiguriert, aber ungetestet.
+- Ein Modell (Gemma 4 31B). Alle berichteten Läufe stammen von NVIDIA NIM. Der Gemini-Fallback ist auf dem Smoke Set geprüft: Die Extraktion ist identisch, der Agent entscheidet trotz gleichem Modell nicht in jedem Fall gleich ([ADR 0008](docs/adr/0008-provider-nim-gemini-fallback.md)).
 - Die Token-Kosten stehen auf 0 €, weil das genutzte NVIDIA-NIM-Kontingent kostenlos ist. Ein Betrieb mit bezahlter API würde die Kosten pro 100 Rechnungen für die LLM-Stufen erhöhen.
 - Das Freigabe-Cockpit hat kein Login und keinen CSRF-Schutz und lauscht nur auf 127.0.0.1.
 - Text für das LLM wird nicht pseudonymisiert. Die Rechnungen sind synthetisch, und die Lieferanten sind Firmen. Geschwärzt wird im Audit-Log.

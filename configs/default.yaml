@@ -56,6 +56,8 @@ llm:
     gemini_gross:
       provider: gemini
       basis_url: https://generativelanguage.googleapis.com/v1beta/openai
-      modell: gemma-4-31b-it           # bitte prüfen
+      modell: models/gemma-4-31b-it    # geprüft 20.11.2026 (Modellliste Gemini-API); Denkblock nicht abschaltbar, wird entfernt
       key_env: GEMINI_API_KEY
       rpm: 15
+      timeout_s: 300
+      max_tokens: 8192                 # Denk-Tokens zählen mit; mit 2048 brach das JSON ab
