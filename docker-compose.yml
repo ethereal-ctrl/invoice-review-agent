@@ -18,5 +18,49 @@ services:
       timeout: 3s
       retries: 30
 
+  # Demo: docker compose --profile demo up --build
+  # Erzeugt die Daten, lädt sie, arbeitet die Queue mit Stufe 1 ab und startet das Cockpit
+  # auf http://127.0.0.1:8000 (nur lokal erreichbar). Ohne Profil startet nur Postgres.
+  setup:
+    profiles: [demo]
+    build: .
+    image: invoice-review-agent:lokal
+    entrypoint: ["sh", "-c", "invoice generate && invoice load"]
+    environment:
+      IA_OWNER_DSN: postgresql://${POSTGRES_USER:-ia_owner}:${POSTGRES_PASSWORD:-ia_owner_dev}@postgres:5432/${POSTGRES_DB:-invoice}
+    volumes:
+      - daten:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    profiles: [demo]
+    image: invoice-review-agent:lokal
+    command: ["worker", "--stufe", "regeln", "--threads", "4"]
+    environment:
+      IA_AGENT_DSN: postgresql://ia_agent:${IA_AGENT_PASSWORD:-ia_agent_dev}@postgres:5432/${POSTGRES_DB:-invoice}
+    volumes:
+      - daten:/app/data
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+
+  cockpit:
+    profiles: [demo]
+    image: invoice-review-agent:lokal
+    command: ["ui", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      IA_MENSCH_DSN: postgresql://ia_mensch:${IA_MENSCH_PASSWORD:-ia_mensch_dev}@postgres:5432/${POSTGRES_DB:-invoice}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - daten:/app/data
+      - ./runs:/app/runs:ro
+    depends_on:
+      worker:
+        condition: service_completed_successfully
+
 volumes:
   pgdata:
+  daten:

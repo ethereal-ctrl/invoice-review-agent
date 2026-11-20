@@ -320,6 +320,9 @@ def worker(
 @app.command("ui")
 def ui(
     port: Annotated[int, typer.Option()] = 8000,
+    host: Annotated[
+        str, typer.Option(help="0.0.0.0 nur im Container; dort bindet Compose an 127.0.0.1")
+    ] = "127.0.0.1",
     config: ConfigOption = STANDARD_CONFIG,
     daten: ZielOption = STANDARD_ZIEL,
     runs: LaeufeOption = STANDARD_LAEUFE,
@@ -332,7 +335,7 @@ def ui(
 
     dsn = dsn or "postgresql://ia_mensch:ia_mensch_dev@localhost:55432/invoice"
     app_ = erstelle_app(dsn, lade(config), daten.resolve(), runs.resolve())
-    uvicorn.run(app_, host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run(app_, host=host, port=port, log_level="warning")
 
 
 @app.command("sensitivitaet")

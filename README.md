@@ -84,6 +84,14 @@ scripts/testlauf.sh                                  # einmaliger Test-Lauf alle
 
 **Test-Lauf ohne zweiten Versuch.** Das Register erlaubt pro Stufe nur einen gespeicherten Test-Lauf. Damit ein Netzwerkabbruch das Ergebnis nicht verfälscht, füllt `invoice vorwaermen` zuerst den Antwort-Cache und wiederholt dabei nur Fälle mit Netz- oder Anbieterfehlern. Entscheidungen, Metriken und Gold-Labels sieht es nicht. Erst danach läuft die Stufe einmal im Replay-Modus und wird gespeichert. Die Latenz des Test-Laufs stammt aus dem Vorwärm-Bericht (`runs/vorwaermen/`), weil der Replay-Lauf nur den Cache misst.
 
+## Demo mit Docker
+
+```bash
+docker compose --profile demo up --build
+```
+
+Startet Postgres, erzeugt die 300 Rechnungen, lädt sie, arbeitet die Queue mit Stufe 1 ab und öffnet das Freigabe-Cockpit auf **http://127.0.0.1:8000** (nur lokal erreichbar). Dort warten 18 Rechnungen über der Freigabegrenze auf eine Entscheidung. Jeder Dienst läuft mit eigener Datenbankrolle und ohne Root-Rechte im Container. Ohne `--profile demo` startet nur Postgres, zum Beispiel für die Tests.
+
 ## Schnellstart
 
 ```bash

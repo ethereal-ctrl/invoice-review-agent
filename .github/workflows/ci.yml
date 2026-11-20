@@ -54,3 +54,8 @@ jobs:
           for stufe in regeln llm:nim_gross agent:nim_gross; do
             uv run invoice angriffe --stufe "$stufe" --replay
           done
+
+      - name: Docker-Image bauen und starten
+        run: |
+          docker build -t invoice-review-agent:ci .
+          docker run --rm invoice-review-agent:ci config > /dev/null
