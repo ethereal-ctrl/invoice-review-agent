@@ -1,28 +1,61 @@
-# invoice-agent
+# invoice-review-agent
 
 **Ein Agent für Rechnungsprüfung (3-Way-Match), der genauso streng gemessen wird wie ein Forschungsexperiment.**
 
-> _Business-Aussage folgt nach dem Test-Lauf. Hier stehen dann nur gemessene Zahlen: Kosten pro 100 Rechnungen, unsichere Freigaben, Last für Menschen._
+> **Ergebnis auf 200 ungesehenen Testrechnungen:** Die beste Stufe (LLM liest, Regelwerk entscheidet, Policy kontrolliert) senkt die Fehlerkosten laut Kostenmatrix gegenüber vollständig manueller Prüfung von **491 € auf 79 € pro 100 Rechnungen** (bei realistischen 5 % fehlerhaften Rechnungen). **77,5 %** der Rechnungen laufen ohne Menschen durch, bei **0 unsicheren Freigaben**, auch bei 12 gezielten Angriffen. Ein frei entscheidender LLM-Agent ist messbar teurer (+135 € pro 100). Neunmal wollte er eine Rechnung mit Rechenfehler bezahlen, neunmal hat die Policy-Middleware das verhindert.
 
-Eingehende Rechnungen werden gegen Bestellung, Wareneingang und Stammdaten geprüft. Ergebnis ist eine von drei Entscheidungen: **FREIGEBEN**, **ZURÜCKHALTEN** (mit Begründungscode) oder **ESKALIEREN** an einen Menschen. Eine Policy-Schicht um jeden Tool-Aufruf sorgt dafür, dass das LLM keine Regel umgehen kann.
+Eingehende Rechnungen werden gegen Bestellung, Wareneingang und Stammdaten geprüft. Ergebnis ist eine von drei Entscheidungen: **FREIGEBEN**, **ZURÜCKHALTEN** (mit Begründungscode) oder **ESKALIEREN** an einen Menschen. Jede Aktion geht als Antrag durch eine Policy-Schicht, die das LLM nicht umgehen kann.
 
-## Status
+## Ergebnisse (Test-Split, je Stufe genau einmal ausgewertet)
 
-| Baustein | Stand |
-|---|---|
-| Fachliche Spezifikation | ✅ [docs/spezifikation.md](docs/spezifikation.md) |
-| Domänenmodell, Normalisierung, Config | ✅ |
-| Postgres-Schema mit getrennten Rollen | ✅ |
-| Regelwerk R1–R15 (Referenz-Implementierung der Spezifikation) | ✅ |
-| Datengenerator mit Gold-Labels und PDF-Rendering | ✅ |
-| Eval-Harness (Kostenmatrix, gepaarter Bootstrap, Test-Split-Sperre) | ✅ |
-| Baselines B0/B1, Stufe 1 (Regex-Extraktion + Regeln) | ✅ |
-| Stufe 2 (LLM-Extraktion) | ✅ |
-| Policy-Middleware, Audit-Log (append-only, geschwärzt) | ✅ |
-| Stufe 3 (Agent mit Tools, LangGraph, `interrupt` für Freigaben über der Grenze) | ✅ |
-| Angriffsset A1–A12 mit Gate in der CI | ✅ |
-| Postgres-Queue (SKIP LOCKED) und Worker als Rolle `ia_agent` | ✅ |
-| Freigabe-Cockpit (FastAPI + HTMX), Fortsetzen des Agenten über Postgres-Checkpointer | ✅ |
+| | B0 immer freigeben | B1 immer eskalieren | Stufe 1 Regex + Regeln | **Stufe 2 LLM-Extraktion + Regeln** | Stufe 3 LLM-Agent |
+|---|---|---|---|---|---|
+| Kosten pro 100 Rechnungen | 76.989 € | 430 € | 227,50 € | **50 €** | 185 € |
+| … bei 5 % Fehlerquote | 9.624 € | 491 € | 273 € | **79 €** | 260 € |
+| Genauigkeit | 60 % | 14 % | 54,5 % | **91 %** | 80 % |
+| Unsichere Freigaben | 80 | 0 | 0 | **0** | 0 |
+| Ohne Menschen erledigt | 100 % | 0 % | 40,5 % | **77,5 %** | 74,5 % |
+| Angriffe automatisch freigegeben | 12 / 12 | – | 0 / 12 | **0 / 12** | 0 / 12 |
+| Layout A (bekannt): Kosten / Genauigkeit | | | 34 € / 93 % | 49 € / 92 % | 181 € / 81 % |
+| Layout C (unbekannt): Kosten / Genauigkeit | | | 429 € / 14 % | 51 € / 90 % | 189 € / 79 % |
+| Latenz pro Rechnung (p50) | | | 0,04 s | 24 s ¹ | 133 s |
+
+Die Unterschiede sind mit gepaartem Bootstrap geprüft (2.000 Wiederholungen, 95-%-Intervall):
+
+1. **Die LLM-Extraktion lohnt sich beim unbekannten Format.** Auf dem bekannten Layout A sind Regex und LLM praktisch gleich. Das neue Lieferantenformat (Layout C) kann die Regex in keinem einzigen Fall lesen (98 von 98 Fällen fail-safe eskaliert), das LLM liest alle. Stufe 2 gegenüber Stufe 1: **−177,50 € pro 100** [−212,50; −140] und **−37 Prozentpunkte Last für Menschen**.
+2. **Ein frei entscheidender Agent ist teurer als eine feste Pipeline**, wenn sich die Prüfregeln vollständig spezifizieren lassen. Stufe 3 gegenüber Stufe 2: **+135 € pro 100** [+82,50; +190] und −11 Prozentpunkte Genauigkeit. Rechenfehler (F4) erkennt der Agent nur in 31 % der Fälle, und er hält korrekte Rechnungen zu oft zurück (Preis innerhalb der Toleranz, Kartonware).
+3. **Die Policy macht den Agenten sicher, nicht klüger.** In allen 9 Fällen, in denen der Agent eine Rechnung mit Rechenfehler freigeben wollte, hat die Middleware verweigert (`vorbedingung:F4`). Ohne sie wären das 9 falsche Zahlungen gewesen. Mit ihr gibt es in keiner der Stufen 1 bis 3 eine unsichere Freigabe, weder auf Dev noch auf Test noch bei den Angriffen.
+
+**Robustheit der Kostenannahmen:** Die Reihenfolge Stufe 2 < Stufe 3 < Stufe 1 < B1 bleibt in allen 9 Szenarien gleich (Pauschalen ×0,5, ×1 und ×2, reale Fehlerquote 2, 5 und 10 %; `invoice sensitivitaet --split test`). Auf dem Dev-Split (nur Layout A) liegen Stufe 1 und 2 gleichauf, und Stufe 3 ist auch dort signifikant teurer (+95 € pro 100).
+
+¹ Gemessen auf Dev. Der Test-Lauf von Stufe 2 fiel in eine nächtliche Störung von NVIDIA NIM, seine Latenz ist dadurch verzerrt. Die Entscheidungen sind davon nicht betroffen, weil nur vollständig beantwortete Läufe gespeichert werden.
+
+**Daraus folgende Architekturentscheidung:** Das LLM liest unstrukturierte Dokumente, ein deterministisches Regelwerk entscheidet, und eine Policy-Middleware kontrolliert jede Aktion. Ein Agent ist dort sinnvoll, wo sich Regeln nicht vollständig aufschreiben lassen, und auch dann nur hinter derselben Policy.
+
+## Architektur
+
+```mermaid
+flowchart LR
+    Q[("app.faelle<br/>Queue, SKIP LOCKED")] --> W["Worker<br/>Rolle ia_agent"]
+    W --> X["Extraktion<br/>Regex oder LLM"]
+    X --> R["Regelwerk R1–R15<br/>Stufe 1 und 2"]
+    X --> A["LangGraph-Agent<br/>Stufe 3"]
+    ERP[("erp.*<br/>nur SELECT")] --> A
+    ERP --> R
+    R --> P{"Policy-Middleware"}
+    A --> P
+    P -->|erlaubt| D[("app.entscheidungen")]
+    P -->|verweigert| E["eskalieren"]
+    P -->|über Kompetenzgrenze| H["Freigabe-Cockpit<br/>Mensch, Rolle ia_mensch"]
+    H -->|"setzt Agent fort<br/>(Postgres-Checkpointer)"| D
+    P -.-> L[("audit.ereignisse<br/>append-only, geschwärzt")]
+    H -.-> L
+```
+
+- **Policy-Middleware** ([policy.py](src/invoice_agent/policy.py), [ADR 0005](docs/adr/0005-policy-in-der-middleware.md)): Allowlist von Tools mit Risikoklassen. Ein Tool zum Ändern von Stammdaten gibt es nicht. Schreibaktionen sind nur für den eigenen Fall erlaubt. Vor jeder Freigabe prüft die Policy die Vorbedingungen selbst nach und ignoriert Begründungen des Agenten. Über 5.000 € kumuliert pro Bestellung entscheidet ein Mensch.
+- **Datenbankrollen:** Der Agent darf das ERP nur lesen und das Audit-Log nur ergänzen. Ein Trigger sperrt UPDATE und DELETE im Protokoll. Die Sachbearbeitung darf über Freigaben entscheiden, das ERP aber nie ändern.
+- **Agent** ([agent.py](src/invoice_agent/stufen/agent.py), [ADR 0003](docs/adr/0003-langgraph-fuer-den-agenten.md)): LangGraph mit nativem Tool Calling über den eigenen LLM-Client (Cache, Replay, Rate Limiter). Bei einer Freigabe über der Grenze hält der Graph per `interrupt` an und läuft nach der Entscheidung im Cockpit in einem anderen Prozess weiter.
+- **Stack:** Python 3.13, uv, Pydantic, Typer, Postgres 17, psycopg 3, LangGraph, FastAPI und HTMX, Gemma 4 31B über NVIDIA NIM, ruff, pyright strict, pytest (rund 220 Tests), GitHub Actions.
 
 ## Eval-Ladder
 
@@ -82,11 +115,17 @@ uv run pytest -m "not db"   # ohne Datenbank
 ## Aufbau
 
 ```
-src/invoice_agent/   Code (Domänenmodell, Normalisierung, Config, CLI)
-configs/             YAML-Konfiguration (Toleranzen, Policy, Generator)
-db/init/             Schema und Rollen (erp, app, audit)
-docs/                Spezifikation und ADRs
-tests/               pytest
+src/invoice_agent/        Domäne, Regelwerk, Policy, Audit, Queue, CLI
+  stufen/                 Baselines, Regelstufe (1 und 2), LangGraph-Agent (3)
+  generator/              Datengenerator und Angriffsset (eingefroren)
+  eval/                   Kostenmatrix, Bootstrap, Sensitivität, Läufe, Vorwärmen
+  ui/                     Freigabe-Cockpit (FastAPI + HTMX)
+configs/                  Toleranzen, Policy-Allowlist, LLM-Profile, Gate-Werte
+db/init/                  Schema und Rollen (erp, app, audit, lg)
+docs/                     Spezifikation und ADRs
+replay/llm/               Antwort-Cache für die CI (Smoke Set und Angriffe)
+scripts/testlauf.sh       einmaliger Test-Lauf aller Stufen
+tests/                    pytest, inklusive Tests gegen die echte Datenbank
 ```
 
 ## Betrieb: Queue und Worker
@@ -148,9 +187,12 @@ Siehe [docs/adr](docs/adr/README.md).
 
 ## Grenzen
 
-Synthetische Daten, ein PDF-Layout, nur EUR, kein Skonto. Die Taxonomie orientiert sich an typischen Fehlern in der Kreditorenbuchhaltung und ist nicht an echten Rechnungen validiert. Details in [docs/spezifikation.md](docs/spezifikation.md), Abschnitt 8.
+Synthetische Daten, zwei PDF-Layouts (A für die Entwicklung, C nur im Test-Split), nur EUR, kein Skonto. Die Taxonomie orientiert sich an typischen Fehlern in der Kreditorenbuchhaltung und ist nicht an echten Rechnungen validiert. Details in [docs/spezifikation.md](docs/spezifikation.md), Abschnitt 8.
 
 - Die Regex-Extraktion von Stufe 1 kennt Layout A vollständig. Ihr Ergebnis auf Layout A ist darum eine Obergrenze und kein fairer Vergleich. Aussagekräftig ist Layout C im Test-Split.
+- Die Gold-Labels werden vom selben Regelwerk berechnet, das Stufe 1 und 2 verwenden. Das ist so gewollt, die Spezifikation ist die einzige Quelle ([ADR 0001](docs/adr/0001-spezifikation-als-einzige-quelle.md)). Deshalb misst der Vergleich vor allem die Extraktion. Mit echten Rechnungen und von Menschen vergebenen Labels würde dieselbe Eval-Ladder unverändert laufen.
+- Die Kostenpauschalen (15 €, 10 €, 5 €) sind Annahmen ([ADR 0006](docs/adr/0006-kostenmatrix-in-euro.md)). Die Sensitivitätsanalyse zeigt, dass die Reihenfolge der Stufen nicht von ihnen abhängt.
+- Ein Modell (Gemma 4 31B), ein Anbieter. Der Gemini-Fallback ist konfiguriert, aber ungetestet.
 - Die Token-Kosten stehen auf 0 €, weil das genutzte NVIDIA-NIM-Kontingent kostenlos ist. Ein Betrieb mit bezahlter API würde die Kosten pro 100 Rechnungen für die LLM-Stufen erhöhen.
 - Das Freigabe-Cockpit hat kein Login und keinen CSRF-Schutz und lauscht nur auf 127.0.0.1.
 - Text für das LLM wird nicht pseudonymisiert. Die Rechnungen sind synthetisch, und die Lieferanten sind Firmen. Geschwärzt wird im Audit-Log.
